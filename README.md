@@ -47,7 +47,6 @@ Sift is a minimalist, chronological reading interface and companion bot for Tele
 - **Frontend / Fullstack**: SvelteKit (Svelte 5 Runes), Tailwind CSS, Lucide Icons
 - **Backend / Telegram Layer**: Node.js, `@sveltejs/adapter-node`, `grammY`, `gramjs` (MTProto)
 - **Database & ORM**: PostgreSQL, Drizzle ORM
-- **Deployment Target**: Cloud Node.js Container / Alet Solo
 
 ---
 
@@ -75,15 +74,6 @@ pnpm run build
 # Start production server
 pnpm start
 ```
-
----
-
-## ☁️ Deployment Guide (Alet / Cloud Platforms)
-
-1. **Create Database**: Provision a managed PostgreSQL instance.
-2. **Deploy Application**: Connect your GitHub repository to your hosting platform.
-3. **Apply Migrations**: Run `pnpm run db:push` during build or in the deployment shell.
-4. **Launch**: Start the service via `node build` (or `pnpm start`).
 
 ---
 
