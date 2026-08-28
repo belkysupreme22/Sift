@@ -71,7 +71,7 @@
 		{
 			tag: 'Instant Fuzzy Search',
 			title: 'Search Anything with ⌘K or /',
-			description: 'Type ⌘K (Ctrl+K) or / anywhere on your keyboard to instantly filter across all 1,700+ indexed stories, topics, and channel handles in real-time.',
+			description: 'Type ⌘K (Ctrl+K) or / anywhere on your keyboard to instantly filter across all your indexed stories, topics, and channel handles in real-time.',
 			tip: 'Search terms are highlighted directly on story snippets as you type.',
 			badge: 'Step 3 of 5'
 		},
