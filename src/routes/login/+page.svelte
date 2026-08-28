@@ -102,6 +102,12 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Connect Telegram — Sift</title>
+	<meta name="description" content="Securely connect your Telegram account to Sift and read your subscribed channels in a clean chronological timeline." />
+	<meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 <div class="min-h-screen bg-[#0d0d0d] text-[#e0e0e0] flex flex-col justify-between p-6 font-['Lexend',sans-serif]">
 	<!-- Header -->
 	<header class="flex items-center justify-between max-w-md w-full mx-auto">
