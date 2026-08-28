@@ -228,21 +228,16 @@ export function startBot(): Bot | null {
 		)
 		.catch(() => {});
 
-	// Auto-configure the bottom-left Telegram Menu Button to open the Mini App directly
-	const configuredWebAppUrl = (process.env.WEBAPP_URL || '').trim();
-	if (configuredWebAppUrl && configuredWebAppUrl.startsWith('https://')) {
-		bot.api
-			.setChatMenuButton({
-				menu_button: {
-					type: 'web_app',
-					text: 'Sift Timeline',
-					web_app: { url: configuredWebAppUrl }
-				}
-			})
-			.catch((err) => {
-				console.warn('[Bot] Failed to set menu button:', err.message);
-			});
-	}
+	// Restore the bottom-left Telegram Menu Button to show the list of bot commands
+	bot.api
+		.setChatMenuButton({
+			menu_button: {
+				type: 'commands'
+			}
+		})
+		.catch((err) => {
+			console.warn('[Bot] Failed to set menu button:', err.message);
+		});
 
 	// /start handler
 	bot.command('start', async (ctx) => {

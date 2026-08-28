@@ -33,5 +33,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 		bootBot();
 	}
 	const response = await resolve(event);
+
+	// Explicitly allow Telegram Mini App WebViews (Web, Desktop, iOS, Android)
+	response.headers.delete('X-Frame-Options');
+	response.headers.set(
+		'Content-Security-Policy',
+		"frame-ancestors 'self' https://web.telegram.org https://*.telegram.org https://telegram.org telegram:;"
+	);
+
 	return response;
 };
