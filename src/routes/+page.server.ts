@@ -5,10 +5,29 @@ export const load: PageServerLoad = async ({ url }) => {
 	const selectedChannelId = url.searchParams.get('channel') || undefined;
 
 	try {
-		const [channels, dayCards, session] = await Promise.all([
+		const session = await db.getSession().catch(() => null);
+		const isLoggedIn = Boolean(session?.sessionString);
+
+		// STRICT PRIVACY & SECURITY GATING:
+		// If account is not connected, never leak private channel history or day cards!
+		if (!isLoggedIn) {
+			return {
+				channels: [],
+				dayCards: [],
+				selectedChannelId: null,
+				isLoggedIn: false,
+				sessionUpdatedAt: null,
+				stats: {
+					channelCount: 0,
+					dayCount: 0,
+					messageCount: 0
+				}
+			};
+		}
+
+		const [channels, dayCards] = await Promise.all([
 			db.getAllChannels().catch(() => []),
-			db.getDayCards(selectedChannelId).catch(() => []),
-			db.getSession().catch(() => null)
+			db.getDayCards(selectedChannelId).catch(() => [])
 		]);
 
 		const totalMessages = dayCards.reduce((acc, card) => acc + card.messageCount, 0);
@@ -17,7 +36,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			channels,
 			dayCards,
 			selectedChannelId: selectedChannelId || null,
-			isLoggedIn: Boolean(session?.sessionString),
+			isLoggedIn: true,
 			sessionUpdatedAt: session?.updatedAt ? session.updatedAt.toISOString() : null,
 			stats: {
 				channelCount: channels.length,
@@ -32,6 +51,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			dayCards: [],
 			selectedChannelId: null,
 			isLoggedIn: false,
+			sessionUpdatedAt: null,
 			stats: {
 				channelCount: 0,
 				dayCount: 0,
@@ -41,3 +61,4 @@ export const load: PageServerLoad = async ({ url }) => {
 		};
 	}
 };
+

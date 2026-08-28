@@ -77,8 +77,8 @@
 		},
 		{
 			tag: 'Interactive Story Utilities',
-			title: 'Voice Narration, Star, Share & Filter',
-			description: 'Every story card includes 1-tap superpowers: listen aloud with text-to-speech audio reader, star/bookmark to your Starred tab, copy clean snippets, or filter by channel.',
+			title: 'Bookmarks, Sharing & Channel Filters',
+			description: 'Every story card includes 1-tap superpowers: star/bookmark to your Starred tab, copy clean snippets, filter by channel, and preview upcoming audio narration.',
 			tip: 'Channel names are color-coded based on posting volume so high-density channels stand out.',
 			badge: 'Step 4 of 5'
 		},
@@ -239,32 +239,15 @@
 		triggerHaptic();
 	}
 
-	function speakStory(e: MouseEvent, storyId: string, text: string) {
+	let ttsComingSoonId = $state<string | null>(null);
+
+	function speakStory(e: MouseEvent, storyId: string, _text: string) {
 		e.stopPropagation();
-		if (typeof window === 'undefined' || !window.speechSynthesis) return;
-
-		if (playingSpeechId === storyId) {
-			window.speechSynthesis.cancel();
-			playingSpeechId = null;
-			triggerHaptic();
-			return;
-		}
-
-		window.speechSynthesis.cancel();
-		const utterance = new SpeechSynthesisUtterance(text);
-		utterance.rate = 1.0;
-		utterance.pitch = 1.0;
-
-		utterance.onend = () => {
-			playingSpeechId = null;
-		};
-		utterance.onerror = () => {
-			playingSpeechId = null;
-		};
-
-		playingSpeechId = storyId;
-		window.speechSynthesis.speak(utterance);
+		ttsComingSoonId = storyId;
 		triggerHaptic();
+		setTimeout(() => {
+			if (ttsComingSoonId === storyId) ttsComingSoonId = null;
+		}, 1800);
 	}
 
 	function shareStory(e: MouseEvent, msg: { text: string | null; postedAt: Date }, channelName: string) {
@@ -1092,24 +1075,23 @@
 															</span>
 														{/if}
 
-														<!-- Text-to-Speech Listen Button -->
+														<!-- Text-to-Speech Voice Button (Coming Soon) -->
 														{#if msg.text}
-															<button
-																type="button"
-																onclick={(e) => speakStory(e, msg.id, msg.text || '')}
-																class="opacity-0 group-hover:opacity-100 {isPlaying ? 'opacity-100 text-[#f43f5e]' : 'text-[#666666] hover:text-white'} p-1 rounded hover:bg-[#202020] transition-all cursor-pointer"
-																title="{isPlaying ? 'Stop listening' : 'Listen to story aloud'}"
-															>
-																{#if isPlaying}
-																	<div class="flex items-center gap-0.5 h-3">
-																		<div class="w-0.5 bg-[#f43f5e] rounded-full wave-bar-1"></div>
-																		<div class="w-0.5 bg-[#f43f5e] rounded-full wave-bar-2"></div>
-																		<div class="w-0.5 bg-[#f43f5e] rounded-full wave-bar-3"></div>
-																	</div>
-																{:else}
+															<div class="relative flex items-center">
+																<button
+																	type="button"
+																	onclick={(e) => speakStory(e, msg.id, msg.text || '')}
+																	class="opacity-0 group-hover:opacity-100 text-[#666666] hover:text-[#f43f5e] p-1 rounded hover:bg-[#202020] transition-all cursor-pointer"
+																	title="Audio Voice Narration • Coming Soon"
+																>
 																	<Volume2 class="w-3 h-3" />
+																</button>
+																{#if ttsComingSoonId === msg.id}
+																	<span class="absolute right-0 -top-6 z-30 whitespace-nowrap bg-[#1c1c1c] border border-[#f43f5e]/40 text-[#f43f5e] text-[10px] font-medium px-2 py-0.5 rounded-md shadow-lg">
+																		Audio Narration • Coming Soon
+																	</span>
 																{/if}
-															</button>
+															</div>
 														{/if}
 
 														<!-- Bookmark / Star Button -->
