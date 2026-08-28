@@ -52,23 +52,36 @@
 	// Interactive Onboarding Tour State
 	let isOnboardingOpen = $state(false);
 	let onboardingStep = $state(0);
+	let spotlightRect = $state<{ top: number; left: number; width: number; height: number } | null>(null);
+	let tooltipStyle = $state<{ top: number; left: number; placement: 'bottom' | 'top' | 'right' | 'left' | 'center'; arrowOffset: number }>({
+		top: 100,
+		left: 100,
+		placement: 'bottom',
+		arrowOffset: 24
+	});
 
 	const onboardingTourSteps = [
 		{
-			tag: 'Welcome to Sift',
-			title: 'A Calm, Chronological Channel Reader',
-			description: 'Sift aggregates all updates from your subscribed Telegram channels into a single, clean timeline without algorithmic bias, tracking, or feed noise.',
+			targetSelector: '#tour-time-switcher',
+			preferredPlacement: 'bottom' as const,
+			tag: 'Time Resolution Switcher',
+			title: 'Switch Day, Week & Month Views',
+			description: 'Seamlessly zoom between Day, Week, and Month chronological views to inspect your updates at your preferred time granularity.',
 			tip: 'Zero AI Loss: Every story is preserved in full unedited text with multi-language script fidelity.',
 			badge: 'Step 1 of 5'
 		},
 		{
-			tag: 'Time Switcher & Day Filters',
-			title: 'Switch Views & Filter by Days of Week',
-			description: 'Toggle between Day, Week, and Month resolutions at any moment. Click on individual weekday chips (e.g. Mon, Tue, Fri) or quick presets (Mon-Fri, Sat-Sun) to focus your reading.',
-			tip: 'The glowing rose vertical beam highlights today with animated presence.',
+			targetSelector: '#tour-weekday-filters',
+			preferredPlacement: 'bottom' as const,
+			tag: 'Days of the Week Filter',
+			title: 'Filter by Specific Days & Presets',
+			description: 'Click on individual weekday pills (e.g. Mon, Tue, Fri) or quick presets (Mon-Fri, Sat-Sun) to instantly focus your reading on specific days.',
+			tip: 'Active pills highlight in rose and update story counts dynamically.',
 			badge: 'Step 2 of 5'
 		},
 		{
+			targetSelector: '#tour-search-btn',
+			preferredPlacement: 'bottom' as const,
 			tag: 'Instant Fuzzy Search',
 			title: 'Search Anything with ⌘K or /',
 			description: 'Type ⌘K (Ctrl+K) or / anywhere on your keyboard to instantly filter across all your indexed stories, topics, and channel handles in real-time.',
@@ -76,23 +89,103 @@
 			badge: 'Step 3 of 5'
 		},
 		{
+			targetSelector: '#tour-story-item',
+			preferredPlacement: 'top' as const,
 			tag: 'Interactive Story Utilities',
 			title: 'Bookmarks, Sharing & Channel Filters',
-			description: 'Every story card includes 1-tap superpowers: star/bookmark to your Starred tab, copy clean snippets, filter by channel, and preview upcoming audio narration.',
+			description: 'Every story card includes 1-tap superpowers: star/bookmark (★), share, copy raw text, filter by channel, and upcoming voice narration.',
 			tip: 'Channel names are color-coded based on posting volume so high-density channels stand out.',
 			badge: 'Step 4 of 5'
 		},
 		{
-			tag: 'Speed Navigation',
+			targetSelector: '#tour-dock-nav',
+			preferredPlacement: 'right' as const,
+			tag: 'Speed Dock Navigation',
 			title: 'Dock Views & Keyboard Cheatsheet',
-			description: 'Navigate Sift with speed using the left dock or keyboard shortcuts: 1 for Timeline, 2 for Channels, 3 for Analytics, 4 for Media Gallery, and 5 for Starred.',
+			description: 'Navigate Sift with speed using the left dock: 1 for Timeline, 2 for Channels, 3 for Metrics, 4 for Media Gallery, and 5 for Starred.',
 			tip: 'Press ? anytime on your keyboard to view the complete keyboard shortcuts cheatsheet.',
 			badge: 'Step 5 of 5'
 		}
 	];
 
+	function updateSpotlightPosition() {
+		if (!isOnboardingOpen || typeof window === 'undefined') return;
+		const step = onboardingTourSteps[onboardingStep];
+		if (!step?.targetSelector) {
+			spotlightRect = null;
+			tooltipStyle = {
+				top: Math.max(20, (window.innerHeight - 300) / 2),
+				left: Math.max(16, (window.innerWidth - 420) / 2),
+				placement: 'center',
+				arrowOffset: 24
+			};
+			return;
+		}
+
+		let el = document.querySelector(step.targetSelector) as HTMLElement | null;
+		if (!el && step.targetSelector === '#tour-story-item') {
+			el = document.querySelector('#tour-empty-welcome') as HTMLElement | null;
+		}
+
+		if (!el) {
+			spotlightRect = null;
+			tooltipStyle = {
+				top: Math.max(20, (window.innerHeight - 300) / 2),
+				left: Math.max(16, (window.innerWidth - 420) / 2),
+				placement: 'center',
+				arrowOffset: 24
+			};
+			return;
+		}
+
+		el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+
+		const rect = el.getBoundingClientRect();
+		const pad = 6;
+		const sRect = {
+			top: Math.max(0, rect.top - pad),
+			left: Math.max(0, rect.left - pad),
+			width: rect.width + pad * 2,
+			height: rect.height + pad * 2
+		};
+		spotlightRect = sRect;
+
+		const cardWidth = Math.min(420, window.innerWidth - 32);
+		const cardEstimatedHeight = 280;
+
+		let top = 0;
+		let left = 0;
+		let placement: 'bottom' | 'top' | 'right' | 'left' | 'center' = 'bottom';
+		let arrowOffset = 24;
+
+		if (step.preferredPlacement === 'right' && sRect.left + sRect.width + cardWidth + 24 < window.innerWidth) {
+			placement = 'right';
+			left = sRect.left + sRect.width + 16;
+			top = Math.max(16, Math.min(window.innerHeight - cardEstimatedHeight - 16, sRect.top));
+			arrowOffset = Math.max(16, Math.min(cardEstimatedHeight - 32, sRect.top - top + 20));
+		} else if (sRect.top + sRect.height + cardEstimatedHeight + 24 < window.innerHeight) {
+			placement = 'bottom';
+			top = sRect.top + sRect.height + 14;
+			left = Math.max(16, Math.min(window.innerWidth - cardWidth - 16, sRect.left + (sRect.width / 2) - (cardWidth / 2)));
+			arrowOffset = Math.max(20, Math.min(cardWidth - 32, sRect.left + (sRect.width / 2) - left));
+		} else if (sRect.top - cardEstimatedHeight - 24 > 0) {
+			placement = 'top';
+			top = sRect.top - cardEstimatedHeight - 14;
+			left = Math.max(16, Math.min(window.innerWidth - cardWidth - 16, sRect.left + (sRect.width / 2) - (cardWidth / 2)));
+			arrowOffset = Math.max(20, Math.min(cardWidth - 32, sRect.left + (sRect.width / 2) - left));
+		} else {
+			placement = 'center';
+			top = Math.max(16, (window.innerHeight - cardEstimatedHeight) / 2);
+			left = Math.max(16, (window.innerWidth - cardWidth) / 2);
+			arrowOffset = 24;
+		}
+
+		tooltipStyle = { top, left, placement, arrowOffset };
+	}
+
 	function finishOnboarding() {
 		isOnboardingOpen = false;
+		spotlightRect = null;
 		try {
 			localStorage.setItem('sift_onboarding_completed', 'true');
 		} catch (_) {}
@@ -103,6 +196,28 @@
 		isOnboardingOpen = true;
 		if (isShortcutsModalOpen) isShortcutsModalOpen = false;
 	}
+
+	$effect(() => {
+		if (isOnboardingOpen) {
+			// Trigger spotlight update when step changes
+			const _step = onboardingStep;
+			const timer = setTimeout(() => {
+				updateSpotlightPosition();
+			}, 60);
+
+			const handleResize = () => updateSpotlightPosition();
+			window.addEventListener('resize', handleResize);
+			window.addEventListener('scroll', handleResize, true);
+
+			return () => {
+				clearTimeout(timer);
+				window.removeEventListener('resize', handleResize);
+				window.removeEventListener('scroll', handleResize, true);
+			};
+		} else {
+			spotlightRect = null;
+		}
+	});
 
 	// Interactive Bookmark / Star System
 	let starredIds = $state<Set<string>>(new Set());
@@ -548,7 +663,7 @@
 
 <div class="flex h-screen w-full bg-[#0d0d0d] text-[#e0e0e0] overflow-hidden font-['Lexend',sans-serif]">
 	<!-- Left Minimal Dock -->
-	<aside class="w-14 sm:w-16 border-r border-[#1a1a1a] bg-[#0d0d0d] flex flex-col items-center py-4 justify-between shrink-0 select-none z-30">
+	<aside id="tour-dock-nav" class="w-14 sm:w-16 border-r border-[#1a1a1a] bg-[#0d0d0d] flex flex-col items-center py-4 justify-between shrink-0 select-none z-30">
 		<div class="flex flex-col items-center gap-6">
 			<!-- App Logo -->
 			<button
@@ -725,6 +840,7 @@
 
 					<!-- Interactive Instant Search Trigger -->
 					<button
+						id="tour-search-btn"
 						type="button"
 						onclick={() => { isSearchOpen = !isSearchOpen; if (isSearchOpen) setTimeout(() => document.getElementById('sift-search-input')?.focus(), 50); }}
 						class="px-2.5 py-1.5 rounded-xl bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] text-xs text-[#888888] hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
@@ -736,7 +852,7 @@
 					</button>
 
 					{#if activeTab === 'timeline' || activeTab === 'starred'}
-						<div class="bg-[#151515] border border-[#222222] p-0.5 rounded-xl flex items-center text-xs font-medium text-[#777777]">
+						<div id="tour-time-switcher" class="bg-[#151515] border border-[#222222] p-0.5 rounded-xl flex items-center text-xs font-medium text-[#777777]">
 							<button
 								type="button"
 								onclick={() => switchTimeView('day')}
@@ -827,7 +943,7 @@
 
 			<!-- Clean Days of the Week Filter Bar (In Timeline & Starred view) -->
 			{#if activeTab === 'timeline' || activeTab === 'starred'}
-				<div class="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none pt-1 border-t border-[#1a1a1a]">
+				<div id="tour-weekday-filters" class="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none pt-1 border-t border-[#1a1a1a]">
 					<div class="flex items-center gap-1 shrink-0">
 						<span class="text-[11px] text-[#666666] font-medium mr-1 flex items-center gap-1">
 							<CalendarDays class="w-3.5 h-3.5 text-[#f43f5e]" />
@@ -918,7 +1034,7 @@
 						{/each}
 					</div>
 				{:else if allGroups.length === 0}
-					<div class="w-full max-w-lg mx-auto bg-[#141414] border border-[#222222] rounded-3xl p-8 flex flex-col gap-6 text-center my-8">
+					<div id="tour-empty-welcome" class="w-full max-w-lg mx-auto bg-[#141414] border border-[#222222] rounded-3xl p-8 flex flex-col gap-6 text-center my-8">
 						<div class="w-12 h-12 rounded-2xl bg-[#1e1e1e] border border-[#2a2a2a] flex items-center justify-center mx-auto text-[#f43f5e]">
 							{#if activeTab === 'starred'}
 								<Star class="w-6 h-6 text-[#fbbf24]" />
@@ -1028,7 +1144,7 @@
 
 								<!-- Bulleted Stories List with Full Interactive Utility Bar -->
 								<div class="flex flex-col ml-5 gap-1">
-									{#each visibleMessages as msg (msg.id)}
+									{#each visibleMessages as msg, msgIndex (msg.id)}
 										{@const isExpanded = Boolean(expandedMessages[msg.id])}
 										{@const isLong = (msg.text || '').length > 180}
 										{@const timeStr = formatMessageTime(msg.postedAt)}
@@ -1039,6 +1155,7 @@
 
 										<!-- Interactive Story Card -->
 										<div
+											id={groupIndex === 0 && msgIndex === 0 ? "tour-story-item" : undefined}
 											role="button"
 											tabindex="0"
 											onclick={() => openSummary(msg, msg.channelName)}
@@ -1700,64 +1817,113 @@
 		</div>
 	{/if}
 
-	<!-- Modern Step-by-Step Onboarding Tour Modal with Highlights & Tooltips -->
+	<!-- Dynamic Moving Spotlight Tour with Anchored Tooltip -->
 	{#if isOnboardingOpen}
 		{@const currentTour = onboardingTourSteps[onboardingStep]}
-		<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
-			<div class="w-full max-w-lg bg-[#141414] border border-[#282828] rounded-3xl p-6 sm:p-8 flex flex-col gap-6 shadow-2xl shadow-black relative animate-in zoom-in-95 duration-150">
-				
+		<div class="fixed inset-0 z-50 pointer-events-none transition-all duration-300">
+			<!-- Dark translucent backdrop with smooth cut-out mask for the active spotlight target -->
+			<svg class="absolute inset-0 w-full h-full pointer-events-auto" onclick={finishOnboarding}>
+				<defs>
+					<mask id="spotlight-mask">
+						<rect width="100%" height="100%" fill="white" />
+						{#if spotlightRect}
+							<rect
+								x={spotlightRect.left}
+								y={spotlightRect.top}
+								width={spotlightRect.width}
+								height={spotlightRect.height}
+								rx="16"
+								fill="black"
+							/>
+						{/if}
+					</mask>
+				</defs>
+				<rect width="100%" height="100%" fill="rgba(0, 0, 0, 0.78)" mask="url(#spotlight-mask)" />
+			</svg>
+
+			<!-- Glowing Animated Spotlight Focus Ring -->
+			{#if spotlightRect}
+				<div
+					class="absolute pointer-events-none rounded-2xl ring-2 ring-[#f43f5e] shadow-[0_0_30px_rgba(244,63,94,0.45)] transition-all duration-300 ease-out"
+					style="top: {spotlightRect.top}px; left: {spotlightRect.left}px; width: {spotlightRect.width}px; height: {spotlightRect.height}px;"
+				></div>
+			{/if}
+
+			<!-- Floating Anchored Tooltip Card (Moves dynamically with each step) -->
+			<div
+				class="absolute pointer-events-auto w-[calc(100vw-32px)] max-w-[420px] bg-[#141414] border border-[#2d2d2d] rounded-2xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xl shadow-black transition-all duration-300 ease-out z-50 animate-in fade-in zoom-in-95 duration-150"
+				style="top: {tooltipStyle.top}px; left: {tooltipStyle.left}px;"
+			>
+				<!-- Tooltip Directional Triangular Arrow Pointer -->
+				{#if tooltipStyle.placement === 'bottom'}
+					<div
+						class="absolute -top-2 w-4 h-4 bg-[#141414] border-t border-l border-[#2d2d2d] rotate-45 transition-all duration-300"
+						style="left: {tooltipStyle.arrowOffset}px;"
+					></div>
+				{:else if tooltipStyle.placement === 'top'}
+					<div
+						class="absolute -bottom-2 w-4 h-4 bg-[#141414] border-b border-r border-[#2d2d2d] rotate-45 transition-all duration-300"
+						style="left: {tooltipStyle.arrowOffset}px;"
+					></div>
+				{:else if tooltipStyle.placement === 'right'}
+					<div
+						class="absolute -left-2 w-4 h-4 bg-[#141414] border-b border-l border-[#2d2d2d] rotate-45 transition-all duration-300"
+						style="top: {tooltipStyle.arrowOffset}px;"
+					></div>
+				{/if}
+
 				<!-- Top Bar: Tag Badge & Skip Button -->
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-2">
-						<span class="text-[11px] font-semibold uppercase tracking-wider text-[#f43f5e] bg-[#f43f5e]/10 px-2.5 py-1 rounded-full border border-[#f43f5e]/20">
+						<span class="text-[10px] font-semibold uppercase tracking-wider text-[#f43f5e] bg-[#f43f5e]/10 px-2 py-0.5 rounded-full border border-[#f43f5e]/20">
 							{currentTour.tag}
 						</span>
-						<span class="text-xs text-[#666666] font-mono">{currentTour.badge}</span>
+						<span class="text-[11px] text-[#666666] font-mono">{currentTour.badge}</span>
 					</div>
 
 					<button
 						type="button"
 						onclick={finishOnboarding}
-						class="text-xs text-[#777777] hover:text-white transition-colors px-2.5 py-1 rounded-lg hover:bg-[#1f1f1f] cursor-pointer"
+						class="text-xs text-[#777777] hover:text-white transition-colors px-2 py-0.5 rounded-lg hover:bg-[#1f1f1f] cursor-pointer"
 					>
 						Skip Tour
 					</button>
 				</div>
 
 				<!-- Step Content -->
-				<div class="flex flex-col gap-3">
-					<div class="flex items-center gap-3">
-						<div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#f43f5e]/20 to-[#f43f5e]/5 border border-[#f43f5e]/30 flex items-center justify-center text-[#f43f5e] shrink-0 shadow-lg shadow-[#f43f5e]/10">
+				<div class="flex flex-col gap-2.5">
+					<div class="flex items-center gap-2.5">
+						<div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#f43f5e]/20 to-[#f43f5e]/5 border border-[#f43f5e]/30 flex items-center justify-center text-[#f43f5e] shrink-0 shadow-md shadow-[#f43f5e]/10">
 							{#if onboardingStep === 0}
-								<Sparkles class="w-5 h-5" />
+								<Sparkles class="w-4 h-4" />
 							{:else if onboardingStep === 1}
-								<CalendarDays class="w-5 h-5" />
+								<CalendarDays class="w-4 h-4" />
 							{:else if onboardingStep === 2}
-								<Search class="w-5 h-5" />
+								<Search class="w-4 h-4" />
 							{:else if onboardingStep === 3}
-								<Activity class="w-5 h-5" />
+								<Activity class="w-4 h-4" />
 							{:else}
-								<Keyboard class="w-5 h-5" />
+								<Keyboard class="w-4 h-4" />
 							{/if}
 						</div>
-						<h2 class="text-lg font-semibold text-white tracking-tight leading-snug">
+						<h2 class="text-base font-semibold text-white tracking-tight leading-snug">
 							{currentTour.title}
 						</h2>
 					</div>
 
-					<p class="text-xs sm:text-sm text-[#999999] leading-relaxed">
+					<p class="text-xs text-[#999999] leading-relaxed">
 						{currentTour.description}
 					</p>
 
 					<!-- Highlight / Pro-Tip Box -->
-					<div class="p-3.5 rounded-2xl bg-[#1a1a1a] border border-[#262626] flex items-start gap-2.5 text-xs text-[#cccccc]">
-						<Lightbulb class="w-4 h-4 text-[#fbbf24] shrink-0 mt-0.5" />
-						<span class="leading-relaxed">{currentTour.tip}</span>
+					<div class="p-3 rounded-xl bg-[#191919] border border-[#242424] flex items-start gap-2 text-xs text-[#cccccc]">
+						<Lightbulb class="w-3.5 h-3.5 text-[#fbbf24] shrink-0 mt-0.5" />
+						<span class="leading-relaxed text-[11px]">{currentTour.tip}</span>
 					</div>
 				</div>
 
 				<!-- Stepper Dots & Navigation Buttons -->
-				<div class="flex flex-col gap-4 pt-2 border-t border-[#222222]">
+				<div class="flex flex-col gap-3 pt-1 border-t border-[#202020]">
 					<div class="flex items-center justify-between">
 						<!-- Stepper Dots Indicator -->
 						<div class="flex items-center gap-1.5">
@@ -1765,7 +1931,7 @@
 								<button
 									type="button"
 									onclick={() => onboardingStep = i}
-									class="h-1.5 rounded-full transition-all duration-300 cursor-pointer {onboardingStep === i ? 'w-6 bg-[#f43f5e]' : 'w-1.5 bg-[#333333] hover:bg-[#555555]'}"
+									class="h-1.5 rounded-full transition-all duration-300 cursor-pointer {onboardingStep === i ? 'w-5 bg-[#f43f5e]' : 'w-1.5 bg-[#333333] hover:bg-[#555555]'}"
 									title={`Jump to Step ${i + 1}`}
 								></button>
 							{/each}
@@ -1777,7 +1943,7 @@
 								<button
 									type="button"
 									onclick={() => onboardingStep--}
-									class="px-3.5 py-2 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2b2b2b] text-xs font-medium text-[#cccccc] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+									class="px-3 py-1.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2b2b2b] text-xs font-medium text-[#cccccc] hover:text-white transition-all cursor-pointer flex items-center gap-1"
 								>
 									<ArrowLeft class="w-3.5 h-3.5" />
 									<span>Back</span>
@@ -1788,7 +1954,7 @@
 								<button
 									type="button"
 									onclick={() => onboardingStep++}
-									class="px-4 py-2 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
+									class="px-3.5 py-1.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
 								>
 									<span>Next Step</span>
 									<ArrowRight class="w-3.5 h-3.5" />
@@ -1797,7 +1963,7 @@
 								<button
 									type="button"
 									onclick={finishOnboarding}
-									class="px-4 py-2 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
+									class="px-3.5 py-1.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
 								>
 									<CheckCircle2 class="w-3.5 h-3.5" />
 									<span>Get Started</span>
@@ -1806,7 +1972,6 @@
 						</div>
 					</div>
 				</div>
-
 			</div>
 		</div>
 	{/if}
