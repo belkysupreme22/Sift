@@ -51,22 +51,6 @@ Sift is a minimalist, chronological reading interface and companion bot for Tele
 
 ---
 
-## ⚙️ Environment Configuration
-
-Create a `.env` file based on `.env.example`:
-
-| Variable | Description | Example |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@host:5432/sift` |
-| `DATABASE_SSL` | Enable SSL for cloud database connections | `true` (or `false` for local) |
-| `BOT_TOKEN` | Telegram Bot API token from `@BotFather` | `123456789:ABC...` |
-| `TG_API_ID` | Telegram API App ID from `my.telegram.org` | `1234567` |
-| `TG_API_HASH` | Telegram API App Hash from `my.telegram.org` | `0123456789abcdef...` |
-| `WEBAPP_URL` | Public HTTPS domain for Telegram WebApp | `https://sift.example.com` |
-| `PORT` | HTTP server port | `3000` |
-
----
-
 ## 🚀 Local Development
 
 ```bash
@@ -96,11 +80,10 @@ pnpm start
 
 ## ☁️ Deployment Guide (Alet / Cloud Platforms)
 
-1. **Create Database**: Provision a managed PostgreSQL instance and copy the `DATABASE_URL`.
+1. **Create Database**: Provision a managed PostgreSQL instance.
 2. **Deploy Application**: Connect your GitHub repository to your hosting platform.
-3. **Configure Environment Variables**: Set `DATABASE_URL`, `DATABASE_SSL=true`, `BOT_TOKEN`, `TG_API_ID`, `TG_API_HASH`, and `WEBAPP_URL` (set to your assigned domain).
-4. **Apply Migrations**: Run `pnpm run db:push` during build or in the deployment shell.
-5. **Launch**: Start the service via `node build` (or `pnpm start`).
+3. **Apply Migrations**: Run `pnpm run db:push` during build or in the deployment shell.
+4. **Launch**: Start the service via `node build` (or `pnpm start`).
 
 ---
 
