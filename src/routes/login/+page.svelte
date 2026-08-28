@@ -111,10 +111,21 @@
 			<span class="text-sm font-semibold tracking-tight">Sift</span>
 		</a>
 
-		<a href="/" class="text-xs text-[#777777] hover:text-white flex items-center gap-1 transition-colors">
+		<button
+			type="button"
+			onclick={() => {
+				if (step === 'code' || step === 'password') {
+					step = 'phone';
+					errorMessage = '';
+				} else {
+					window.location.href = '/';
+				}
+			}}
+			class="text-xs text-[#777777] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#141414] hover:bg-[#1f1f1f] border border-[#222222] transition-all cursor-pointer"
+		>
 			<ArrowLeft class="w-3.5 h-3.5" />
-			<span>Back</span>
-		</a>
+			<span>{step === 'code' || step === 'password' ? 'Change Phone' : 'Back to Timeline'}</span>
+		</button>
 	</header>
 
 	<!-- Center Form Card -->

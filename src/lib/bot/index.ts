@@ -199,7 +199,7 @@ export function startBot(): Bot | null {
 
 	const bot = new Bot(botToken);
 
-	// Register command list with Telegram menu
+	// Register command list and bot description with Telegram
 	bot.api
 		.setMyCommands([
 			{ command: 'start', description: 'Start setup or open timeline' },
@@ -209,6 +209,23 @@ export function startBot(): Bot | null {
 			{ command: 'help', description: 'View guide and instructions' },
 			{ command: 'logout', description: 'Disconnect Telegram session' }
 		])
+		.catch(() => {});
+
+	bot.api
+		.setMyDescription(
+			`Welcome to Sift — your clean, noise-free Telegram channel reader!\n\n` +
+			`✨ What Sift does:\n` +
+			`• 📅 Chronological Timeline: Organizes stories by Day, Week, and Month.\n` +
+			`• 📖 Complete Raw Text: Preserves full unedited stories and multi-language scripts (Amharic/Ge'ez, English, etc.) without algorithmic loss.\n` +
+			`• ⚡ Interactive Mini App: Instant fuzzy search (⌘K), bookmarking, voice text-to-speech, and volume-coded channel metrics.\n\n` +
+			`🚀 Send /start to connect your account and index your channels!`
+		)
+		.catch(() => {});
+
+	bot.api
+		.setMyShortDescription(
+			`Minimalist, chronological daily timeline for your Telegram channels without algorithmic noise.`
+		)
 		.catch(() => {});
 
 	// /start handler
@@ -230,17 +247,18 @@ export function startBot(): Bot | null {
 			const keyboard = new InlineKeyboard();
 
 			if (webAppUrl && !isLocal) {
-				addAppButton(keyboard, 'Open Timeline', webAppUrl).row();
+				addAppButton(keyboard, '✨ Open Sift Timeline', webAppUrl).row();
 			}
-			keyboard.text('Sync Now', 'action_sync_all');
+			keyboard.text('🔄 Sync Latest Stories', 'action_sync_all');
 
 			let startMsg =
-				`**Sift Timeline**\n\n` +
-				`Your Telegram account is connected.\n\n` +
+				`👋 **Welcome back to Sift!**\n\n` +
+				`Your Telegram account is connected and actively indexing.\n\n` +
+				`📌 **Quick Actions:**\n` +
 				`• /sync — Pull latest stories from your channels\n` +
-				`• /channels — Configure channel filter\n` +
+				`• /channels — Configure channel filter (or sync all)\n` +
 				`• /status — Check database and session status\n` +
-				`• /logout — Disconnect your session`;
+				`• /logout — Disconnect session`;
 
 			if (webAppUrl && isLocal) {
 				startMsg += `\n\n👉 **Open Timeline:**\n${webAppUrl}`;
@@ -254,13 +272,17 @@ export function startBot(): Bot | null {
 
 		const keyboard = new InlineKeyboard();
 		if (process.env.WEBAPP_URL) {
-			addAppButton(keyboard, 'Web Login (Recommended)', `${process.env.WEBAPP_URL}/login`).row();
+			addAppButton(keyboard, '⚡ Web Login (Recommended)', `${process.env.WEBAPP_URL}/login`).row();
 		}
 
 		await ctx.reply(
-			`**Sift — Chronological Channel Timeline**\n\n` +
-				`Sift organizes your subscribed channel messages into daily timeline cards without summarization or translation loss.\n\n` +
-				`**Step 1 of 2:** Connect your Telegram account\n` +
+			`👋 **Welcome to Sift**\n\n` +
+				`Sift transforms your cluttered Telegram channels into a clean, chronological daily timeline without algorithmic noise or AI distortion.\n\n` +
+				`✨ **What Sift does:**\n` +
+				`• 📅 **Chronological Timeline**: Groups updates by Day, Week, and Month\n` +
+				`• 📖 **Zero AI Loss**: Preserves full unedited stories and multi-language scripts\n` +
+				`• ⚡ **Interactive Mini App**: Real-time search, bookmarks, audio reader, and channel filtering\n\n` +
+				`🚀 **Step 1 of 2:** Connect your Telegram account\n` +
 				`Reply with your phone number in international format (e.g. \`+251911223344\` or \`+1234567890\`), or tap Web Login below:`,
 			{ parse_mode: 'Markdown', reply_markup: getMarkup(keyboard) }
 		);

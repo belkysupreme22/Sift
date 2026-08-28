@@ -29,7 +29,13 @@
 		Radio,
 		UserCheck,
 		ShieldCheck,
-		CheckCircle2
+		CheckCircle2,
+		Compass,
+		HelpCircle,
+		Lightbulb,
+		Layers,
+		ArrowLeft,
+		ArrowRight
 	} from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -42,6 +48,61 @@
 	let searchQuery = $state('');
 	let isSearchOpen = $state(false);
 	let isAccountModalOpen = $state(false);
+
+	// Interactive Onboarding Tour State
+	let isOnboardingOpen = $state(false);
+	let onboardingStep = $state(0);
+
+	const onboardingTourSteps = [
+		{
+			tag: 'Welcome to Sift',
+			title: 'A Calm, Chronological Channel Reader',
+			description: 'Sift aggregates all updates from your subscribed Telegram channels into a single, clean timeline without algorithmic bias, tracking, or feed noise.',
+			tip: 'Zero AI Loss: Every story is preserved in full unedited text with multi-language script fidelity.',
+			badge: 'Step 1 of 5'
+		},
+		{
+			tag: 'Time Switcher & Day Filters',
+			title: 'Switch Views & Filter by Days of Week',
+			description: 'Toggle between Day, Week, and Month resolutions at any moment. Click on individual weekday chips (e.g. Mon, Tue, Fri) or quick presets (Mon-Fri, Sat-Sun) to focus your reading.',
+			tip: 'The glowing rose vertical beam highlights today with animated presence.',
+			badge: 'Step 2 of 5'
+		},
+		{
+			tag: 'Instant Fuzzy Search',
+			title: 'Search Anything with ⌘K or /',
+			description: 'Type ⌘K (Ctrl+K) or / anywhere on your keyboard to instantly filter across all 1,700+ indexed stories, topics, and channel handles in real-time.',
+			tip: 'Search terms are highlighted directly on story snippets as you type.',
+			badge: 'Step 3 of 5'
+		},
+		{
+			tag: 'Interactive Story Utilities',
+			title: 'Voice Narration, Star, Share & Filter',
+			description: 'Every story card includes 1-tap superpowers: listen aloud with text-to-speech audio reader, star/bookmark to your Starred tab, copy clean snippets, or filter by channel.',
+			tip: 'Channel names are color-coded based on posting volume so high-density channels stand out.',
+			badge: 'Step 4 of 5'
+		},
+		{
+			tag: 'Speed Navigation',
+			title: 'Dock Views & Keyboard Cheatsheet',
+			description: 'Navigate Sift with speed using the left dock or keyboard shortcuts: 1 for Timeline, 2 for Channels, 3 for Analytics, 4 for Media Gallery, and 5 for Starred.',
+			tip: 'Press ? anytime on your keyboard to view the complete keyboard shortcuts cheatsheet.',
+			badge: 'Step 5 of 5'
+		}
+	];
+
+	function finishOnboarding() {
+		isOnboardingOpen = false;
+		try {
+			localStorage.setItem('sift_onboarding_completed', 'true');
+		} catch (_) {}
+	}
+
+	function startOnboardingTour() {
+		onboardingStep = 0;
+		isOnboardingOpen = true;
+		if (isShortcutsModalOpen) isShortcutsModalOpen = false;
+	}
 
 	// Interactive Bookmark / Star System
 	let starredIds = $state<Set<string>>(new Set());
@@ -80,6 +141,16 @@
 	];
 
 	onMount(() => {
+		// Auto-open onboarding tour for first-time visitors
+		try {
+			const completed = localStorage.getItem('sift_onboarding_completed');
+			if (!completed) {
+				setTimeout(() => {
+					isOnboardingOpen = true;
+				}, 600);
+			}
+		} catch (_) {}
+
 		// Load persisted bookmarks from localStorage
 		try {
 			const saved = localStorage.getItem('sift_starred_stories');
@@ -123,6 +194,8 @@
 			}
 
 			if (e.key === 'Escape') {
+				if (isOnboardingOpen) finishOnboarding();
+				if (isAccountModalOpen) isAccountModalOpen = false;
 				if (isShortcutsModalOpen) isShortcutsModalOpen = false;
 				if (selectedStory) selectedStory = null;
 				if (isSearchOpen) isSearchOpen = false;
@@ -654,8 +727,19 @@
 					</div>
 				</div>
 
-				<!-- Right Controls: Instant Search Button + View Switcher -->
+				<!-- Right Controls: Tour + Instant Search Button + View Switcher -->
 				<div class="flex items-center gap-2 sm:gap-3">
+					<!-- Interactive App Tour Trigger -->
+					<button
+						type="button"
+						onclick={startOnboardingTour}
+						class="px-2.5 py-1.5 rounded-xl bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] text-xs text-[#888888] hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
+						title="Take Interactive App Tour"
+					>
+						<Compass class="w-3.5 h-3.5 text-[#fb7185]" />
+						<span class="hidden lg:inline">Tour</span>
+					</button>
+
 					<!-- Interactive Instant Search Trigger -->
 					<button
 						type="button"
@@ -1426,13 +1510,23 @@
 					</div>
 				</div>
 
-				<button
-					type="button"
-					onclick={() => isShortcutsModalOpen = false}
-					class="w-full py-2.5 rounded-xl bg-[#222222] hover:bg-[#2a2a2a] text-xs font-medium text-white transition-colors cursor-pointer"
-				>
-					Got it
-				</button>
+				<div class="flex items-center gap-2 pt-1 border-t border-[#222222]">
+					<button
+						type="button"
+						onclick={startOnboardingTour}
+						class="flex-1 py-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2d2d2d] text-xs font-medium text-[#cccccc] hover:text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+					>
+						<Compass class="w-3.5 h-3.5 text-[#f43f5e]" />
+						<span>App Tour</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => isShortcutsModalOpen = false}
+						class="flex-1 py-2.5 rounded-xl bg-[#222222] hover:bg-[#2a2a2a] text-xs font-medium text-white transition-colors cursor-pointer"
+					>
+						Got it
+					</button>
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -1588,6 +1682,117 @@
 						Switch Account / Re-authenticate
 					</a>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Modern Step-by-Step Onboarding Tour Modal with Highlights & Tooltips -->
+	{#if isOnboardingOpen}
+		{@const currentTour = onboardingTourSteps[onboardingStep]}
+		<div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+			<div class="w-full max-w-lg bg-[#141414] border border-[#282828] rounded-3xl p-6 sm:p-8 flex flex-col gap-6 shadow-2xl shadow-black relative animate-in zoom-in-95 duration-150">
+				
+				<!-- Top Bar: Tag Badge & Skip Button -->
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<span class="text-[11px] font-semibold uppercase tracking-wider text-[#f43f5e] bg-[#f43f5e]/10 px-2.5 py-1 rounded-full border border-[#f43f5e]/20">
+							{currentTour.tag}
+						</span>
+						<span class="text-xs text-[#666666] font-mono">{currentTour.badge}</span>
+					</div>
+
+					<button
+						type="button"
+						onclick={finishOnboarding}
+						class="text-xs text-[#777777] hover:text-white transition-colors px-2.5 py-1 rounded-lg hover:bg-[#1f1f1f] cursor-pointer"
+					>
+						Skip Tour
+					</button>
+				</div>
+
+				<!-- Step Content -->
+				<div class="flex flex-col gap-3">
+					<div class="flex items-center gap-3">
+						<div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#f43f5e]/20 to-[#f43f5e]/5 border border-[#f43f5e]/30 flex items-center justify-center text-[#f43f5e] shrink-0 shadow-lg shadow-[#f43f5e]/10">
+							{#if onboardingStep === 0}
+								<Sparkles class="w-5 h-5" />
+							{:else if onboardingStep === 1}
+								<CalendarDays class="w-5 h-5" />
+							{:else if onboardingStep === 2}
+								<Search class="w-5 h-5" />
+							{:else if onboardingStep === 3}
+								<Activity class="w-5 h-5" />
+							{:else}
+								<Keyboard class="w-5 h-5" />
+							{/if}
+						</div>
+						<h2 class="text-lg font-semibold text-white tracking-tight leading-snug">
+							{currentTour.title}
+						</h2>
+					</div>
+
+					<p class="text-xs sm:text-sm text-[#999999] leading-relaxed">
+						{currentTour.description}
+					</p>
+
+					<!-- Highlight / Pro-Tip Box -->
+					<div class="p-3.5 rounded-2xl bg-[#1a1a1a] border border-[#262626] flex items-start gap-2.5 text-xs text-[#cccccc]">
+						<Lightbulb class="w-4 h-4 text-[#fbbf24] shrink-0 mt-0.5" />
+						<span class="leading-relaxed">{currentTour.tip}</span>
+					</div>
+				</div>
+
+				<!-- Stepper Dots & Navigation Buttons -->
+				<div class="flex flex-col gap-4 pt-2 border-t border-[#222222]">
+					<div class="flex items-center justify-between">
+						<!-- Stepper Dots Indicator -->
+						<div class="flex items-center gap-1.5">
+							{#each onboardingTourSteps as _, i}
+								<button
+									type="button"
+									onclick={() => onboardingStep = i}
+									class="h-1.5 rounded-full transition-all duration-300 cursor-pointer {onboardingStep === i ? 'w-6 bg-[#f43f5e]' : 'w-1.5 bg-[#333333] hover:bg-[#555555]'}"
+									title={`Jump to Step ${i + 1}`}
+								></button>
+							{/each}
+						</div>
+
+						<!-- Next / Back Actions -->
+						<div class="flex items-center gap-2">
+							{#if onboardingStep > 0}
+								<button
+									type="button"
+									onclick={() => onboardingStep--}
+									class="px-3.5 py-2 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2b2b2b] text-xs font-medium text-[#cccccc] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+								>
+									<ArrowLeft class="w-3.5 h-3.5" />
+									<span>Back</span>
+								</button>
+							{/if}
+
+							{#if onboardingStep < onboardingTourSteps.length - 1}
+								<button
+									type="button"
+									onclick={() => onboardingStep++}
+									class="px-4 py-2 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
+								>
+									<span>Next Step</span>
+									<ArrowRight class="w-3.5 h-3.5" />
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={finishOnboarding}
+									class="px-4 py-2 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-1.5 cursor-pointer"
+								>
+									<CheckCircle2 class="w-3.5 h-3.5" />
+									<span>Get Started</span>
+								</button>
+							{/if}
+						</div>
+					</div>
+				</div>
+
 			</div>
 		</div>
 	{/if}
