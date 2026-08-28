@@ -14,6 +14,7 @@
 		errorMessage = '';
 
 		try {
+			await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
 			const res = await fetch('/api/auth/send-code', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },

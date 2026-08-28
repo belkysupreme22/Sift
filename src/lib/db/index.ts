@@ -66,6 +66,13 @@ export async function clearSession(id = 'main') {
 	await db.delete(schema.session).where(eq(schema.session.id, id));
 }
 
+export async function clearAllUserData(id = 'main') {
+	const db = getDb();
+	await db.delete(schema.session).where(eq(schema.session.id, id));
+	await db.delete(schema.messages);
+	await db.delete(schema.channels);
+}
+
 export async function upsertChannel(channel: NewChannel) {
 	const db = getDb();
 	await db

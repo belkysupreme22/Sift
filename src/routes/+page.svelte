@@ -35,7 +35,8 @@
 		Lightbulb,
 		Layers,
 		ArrowLeft,
-		ArrowRight
+		ArrowRight,
+		LogOut
 	} from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -254,6 +255,31 @@
 		{ label: 'Saturday', short: 'Sat', day: 6 },
 		{ label: 'Sunday', short: 'Sun', day: 0 }
 	];
+
+	let isLoggingOut = $state(false);
+
+	async function handleLogout(redirectToLogin = false) {
+		if (isLoggingOut) return;
+		isLoggingOut = true;
+		triggerHaptic();
+		try {
+			await fetch('/api/auth/logout', { method: 'POST' });
+			try {
+				localStorage.removeItem('sift_starred_stories');
+			} catch (_) {}
+
+			if (redirectToLogin) {
+				window.location.href = '/login';
+			} else {
+				window.location.href = '/';
+			}
+		} catch (err) {
+			console.error('[Logout Error]', err);
+			window.location.href = '/login';
+		} finally {
+			isLoggingOut = false;
+		}
+	}
 
 	onMount(() => {
 		// Auto-open onboarding tour for first-time visitors
@@ -1800,18 +1826,31 @@
 					<button
 						type="button"
 						onclick={() => { isAccountModalOpen = false; handleSync(); }}
-						disabled={isSyncing}
-						class="w-full py-2.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#f43f5e]/20"
+						disabled={isSyncing || isLoggingOut}
+						class="w-full py-2.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#f43f5e]/20 disabled:opacity-50"
 					>
 						<RefreshCw class="w-3.5 h-3.5 {isSyncing ? 'animate-spin' : ''}" />
 						<span>{isSyncing ? 'Syncing Stories...' : 'Sync Latest Stories Now'}</span>
 					</button>
-					<a
-						href="/login"
-						class="w-full py-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2c2c2c] text-xs font-medium text-[#cccccc] hover:text-white transition-all text-center"
+
+					<button
+						type="button"
+						onclick={() => handleLogout(true)}
+						disabled={isLoggingOut}
+						class="w-full py-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-[#2c2c2c] text-xs font-medium text-[#cccccc] hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
 					>
-						Switch Account / Re-authenticate
-					</a>
+						<span>{isLoggingOut ? 'Clearing session...' : 'Switch Account / Re-authenticate'}</span>
+					</button>
+
+					<button
+						type="button"
+						onclick={() => handleLogout(false)}
+						disabled={isLoggingOut}
+						class="w-full py-2 rounded-xl text-xs font-medium text-[#ef4444] hover:text-[#f87171] hover:bg-[#ef4444]/10 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+					>
+						<LogOut class="w-3.5 h-3.5" />
+						<span>{isLoggingOut ? 'Logging out...' : 'Log Out & Clear Session'}</span>
+					</button>
 				</div>
 			</div>
 		</div>

@@ -718,6 +718,17 @@ async function getSharedClient(): Promise<TelegramClient | null> {
 	}
 }
 
+export function disconnectSharedClient() {
+	if (sharedMtprotoClient) {
+		try {
+			sharedMtprotoClient.disconnect();
+		} catch (_) {}
+		sharedMtprotoClient = null;
+		sharedSessionString = null;
+	}
+	mediaMemoryCache.clear();
+}
+
 /**
  * Downloads binary image / media buffer on-demand for a given channel and message ID
  */
