@@ -1177,6 +1177,22 @@
 												{:else if msg.hasMedia}
 													<p class="text-xs text-[#666666] italic">[Media update]</p>
 												{/if}
+
+												<!-- Inline Story Media Thumbnail -->
+												{#if msg.hasMedia && msg.telegramMessageId}
+													<div class="mt-1.5 rounded-xl overflow-hidden bg-[#161616] border border-[#242424] max-w-sm max-h-52">
+														<img
+															src={`/api/media/${msg.channelId}/${msg.telegramMessageId}`}
+															alt={`Attachment from ${msg.channelName}`}
+															loading="lazy"
+															class="w-full h-auto max-h-52 object-cover rounded-xl hover:scale-[1.02] transition-transform duration-300"
+															onerror={(e) => {
+																const target = e.currentTarget as HTMLElement;
+																target.style.display = 'none';
+															}}
+														/>
+													</div>
+												{/if}
 											</div>
 										</div>
 									{/each}
@@ -1399,10 +1415,26 @@
 											<span class="text-[11px] text-[#666666] shrink-0">{formatMessageTime(item.postedAt)}</span>
 										</div>
 
-										<!-- Media Preview Card -->
-										<div class="h-28 rounded-xl bg-[#191919] border border-[#262626] group-hover:border-[#333333] flex flex-col items-center justify-center gap-1.5 transition-all text-[#666666] group-hover:text-[#999999]">
-											<ImageIcon class="w-6 h-6 text-[#f43f5e]" />
-											<span class="text-[11px] font-mono font-medium">Telegram Media Attachment</span>
+										<!-- Media Preview Card with Dynamic MTProto Photo Streaming -->
+										<div class="h-44 sm:h-48 rounded-xl bg-[#191919] border border-[#262626] group-hover:border-[#383838] overflow-hidden relative transition-all flex items-center justify-center">
+											{#if item.rawMsg?.telegramMessageId}
+												<img
+													src={`/api/media/${item.rawMsg.channelId}/${item.rawMsg.telegramMessageId}`}
+													alt={`Media from ${item.channelName}`}
+													loading="lazy"
+													class="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
+													onerror={(e) => {
+														const target = e.currentTarget as HTMLImageElement;
+														target.style.display = 'none';
+														const fb = target.nextElementSibling as HTMLElement;
+														if (fb) fb.classList.remove('hidden');
+													}}
+												/>
+											{/if}
+											<div class="flex-col items-center justify-center gap-1.5 text-[#666666] group-hover:text-[#999999] p-4 text-center {item.rawMsg?.telegramMessageId ? 'hidden' : 'flex'}">
+												<ImageIcon class="w-7 h-7 text-[#f43f5e]" />
+												<span class="text-[11px] font-mono font-medium">Telegram Media Attachment</span>
+											</div>
 										</div>
 
 										{#if item.text}

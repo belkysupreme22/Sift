@@ -690,3 +690,86 @@ export function startBot(): Bot | null {
 
 	return bot;
 }
+
+// In-memory LRU-like cache for media buffers to serve images blazing fast
+const mediaMemoryCache = new Map<string, { buffer: Buffer; mimeType: string }>();
+let sharedMtprotoClient: TelegramClient | null = null;
+let sharedSessionString: string | null = null;
+
+async function getSharedClient(): Promise<TelegramClient | null> {
+	const sessionRecord = await db.getSession();
+	if (!sessionRecord || !sessionRecord.sessionString) return null;
+
+	if (sharedMtprotoClient && sharedSessionString === sessionRecord.sessionString && sharedMtprotoClient.connected) {
+		return sharedMtprotoClient;
+	}
+
+	try {
+		if (sharedMtprotoClient) {
+			try { await sharedMtprotoClient.disconnect(); } catch (_) {}
+		}
+		sharedMtprotoClient = createMtprotoClient(sessionRecord.sessionString);
+		await sharedMtprotoClient.connect();
+		sharedSessionString = sessionRecord.sessionString;
+		return sharedMtprotoClient;
+	} catch (err: any) {
+		console.error('[MTProto Shared Client Error]', err?.message);
+		return null;
+	}
+}
+
+/**
+ * Downloads binary image / media buffer on-demand for a given channel and message ID
+ */
+export async function getMessageMediaBuffer(
+	channelId: string,
+	messageId: number
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+	const cacheKey = `${channelId}:${messageId}`;
+	if (mediaMemoryCache.has(cacheKey)) {
+		return mediaMemoryCache.get(cacheKey)!;
+	}
+
+	const client = await getSharedClient();
+	if (!client) return null;
+
+	try {
+		// Resolve entity (channel or chat)
+		const entity = await client.getInputEntity(channelId).catch(() => channelId);
+		const messages: any[] = await client.getMessages(entity as any, { ids: [messageId] });
+		
+		if (!messages || messages.length === 0 || !messages[0]?.media) {
+			return null;
+		}
+
+		const msg = messages[0];
+		const downloaded = await client.downloadMedia(msg, {
+			workers: 1
+		});
+
+		if (!downloaded || !(downloaded instanceof Buffer || downloaded instanceof Uint8Array)) {
+			return null;
+		}
+
+		const finalBuffer = Buffer.isBuffer(downloaded) ? downloaded : Buffer.from(downloaded);
+		const mimeType = msg.media?.document?.mimeType || 'image/jpeg';
+
+		const result = {
+			buffer: finalBuffer,
+			mimeType
+		};
+
+		// Keep up to 150 items in fast cache
+		if (mediaMemoryCache.size > 150) {
+			const oldestKey = mediaMemoryCache.keys().next().value;
+			if (oldestKey) mediaMemoryCache.delete(oldestKey);
+		}
+		mediaMemoryCache.set(cacheKey, result);
+
+		return result;
+	} catch (err: any) {
+		console.warn(`[Media Proxy] Could not download media for message ${channelId}:${messageId}:`, err?.message);
+		return null;
+	}
+}
+
