@@ -1084,7 +1084,7 @@
 								{:else if selectedChannelFilter || selectedWeekdays.length > 0 || searchQuery}
 									Try adjusting your search query, selecting different days of the week, or clearing filters.
 								{:else}
-									Your chronological channel timeline with glowing story strings.
+									Your chronological channel timeline.
 								{/if}
 							</p>
 						</div>
