@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import * as db from '$lib/db/index.js';
+import { markChannelAsRead, markChannelsAsRead } from '$lib/bot/index.js';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const selectedChannelId = url.searchParams.get('channel') || undefined;
@@ -29,6 +30,18 @@ export const load: PageServerLoad = async ({ url }) => {
 			db.getAllChannels().catch(() => []),
 			db.getDayCards(selectedChannelId).catch(() => [])
 		]);
+
+		// MARK AS READ AT VIEW-TIME:
+		// Opening the timeline in Sift clears Telegram's unread badge
+		if (selectedChannelId) {
+			markChannelAsRead(selectedChannelId).catch((err) => {
+				console.warn(`[ViewRead] Could not mark channel ${selectedChannelId} as read:`, err?.message);
+			});
+		} else if (channels.length > 0) {
+			markChannelsAsRead(channels.map((c) => c.id)).catch((err) => {
+				console.warn('[ViewRead] Could not mark channels as read:', err?.message);
+			});
+		}
 
 		const totalMessages = dayCards.reduce((acc, card) => acc + card.messageCount, 0);
 

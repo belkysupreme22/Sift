@@ -99,9 +99,24 @@ export function createMtprotoClient(sessionString = '') {
 }
 
 /**
- * Pulls recent messages from all subscribed channels (or allowlist if provided) and writes to Postgres
+ * Returns the list of tracked channel handles or IDs from environment variables.
+ * Prioritizes TRACKED_CHANNELS, with CHANNELS_ALLOWLIST as fallback.
  */
-export async function syncChannels(maxChannelsLimit = 20): Promise<{
+export function getTrackedChannels(): string[] {
+	const raw = (process.env.TRACKED_CHANNELS || process.env.CHANNELS_ALLOWLIST || '').trim();
+	if (!raw) return [];
+	return raw
+		.split(/[\s,]+/)
+		.map((s) => s.trim().toLowerCase().replace(/^@/, ''))
+		.filter((s) => s.length > 0);
+}
+
+/**
+ * Pulls and stores UNREAD messages for each channel in the allowlist (one channel at a time sequentially).
+ * Pulls all messages after that dialog's read_inbox_max_id via GramJS getDialogs (no cap on backlog size).
+ * DOES NOT mark messages as read in Telegram (marking as read happens at view-time in the timeline route).
+ */
+export async function syncChannels(): Promise<{
 	syncedChannelsCount: number;
 	totalMessagesCount: number;
 	channelsDetail: Array<{ name: string; count: number }>;
@@ -111,46 +126,41 @@ export async function syncChannels(maxChannelsLimit = 20): Promise<{
 		throw new Error('No active Telegram session found. Please log in first.');
 	}
 
-	const rawAllowlist = (process.env.CHANNELS_ALLOWLIST || '').trim();
-	const explicitFilter = rawAllowlist
-		? rawAllowlist
-				.split(/[\s,]+/)
-				.map((s) => s.trim().toLowerCase().replace(/^@/, ''))
-				.filter((s) => s.length > 0)
-		: [];
-
-	const client = createMtprotoClient(sessionRecord.sessionString);
-	await client.connect();
+	const trackedList = getTrackedChannels();
+	const client = await getSharedClient();
+	if (!client) {
+		throw new Error('Could not establish GramJS client connection.');
+	}
 
 	let totalMessagesCount = 0;
 	const channelsDetail: Array<{ name: string; count: number }> = [];
 
 	try {
-		console.log('[Sync] Fetching user dialogs to discover subscribed channels...');
+		console.log('[Sync] Fetching dialogs to discover subscribed channels and read_inbox_max_id...');
 		const dialogs = await client.getDialogs({ limit: 100 });
 
 		const channelDialogs = dialogs.filter((dialog) => {
 			if (!dialog.isChannel) return false;
 
-			if (explicitFilter.length > 0) {
+			if (trackedList.length > 0) {
 				const username = (dialog.entity as any)?.username?.toLowerCase() || '';
 				const title = (dialog.title || '').toLowerCase();
 				const idStr = dialog.id?.toString() || '';
 
 				return (
-					explicitFilter.includes(username) ||
-					explicitFilter.includes(title) ||
-					explicitFilter.includes(idStr)
+					trackedList.includes(username) ||
+					trackedList.includes(title) ||
+					trackedList.includes(idStr)
 				);
 			}
 
 			return true;
 		});
 
-		const targets = channelDialogs.slice(0, maxChannelsLimit);
-		console.log(`[Sync] Syncing ${targets.length} channels...`);
+		console.log(`[Sync] Syncing unread backlog for ${channelDialogs.length} channels sequentially...`);
 
-		for (const dialog of targets) {
+		// Process ONE channel at a time sequentially to strictly stay under MTProto rate limits
+		for (const dialog of channelDialogs) {
 			try {
 				const entity = dialog.entity;
 				if (!entity) continue;
@@ -165,31 +175,68 @@ export async function syncChannels(maxChannelsLimit = 20): Promise<{
 				};
 				await db.upsertChannel(channelData);
 
-				// 2. Fetch recent messages (up to 100 messages per channel)
-				const rawMessages: any[] = await client.getMessages(entity, {
-					limit: 100
-				});
+				// 2. Determine read_inbox_max_id (only pull messages newer than this)
+				const readInboxMaxId = Number(
+					dialog.dialog?.readInboxMaxId ?? (dialog as any).readInboxMaxId ?? 0
+				);
+				const unreadCount = Number(dialog.unreadCount ?? dialog.dialog?.unreadCount ?? 0);
 
+				console.log(`[Sync] Channel "${channelName}" (ID: ${channelId}) -> readInboxMaxId: ${readInboxMaxId}, unreadCount: ${unreadCount}`);
+
+				// 3. Pull all messages newer than readInboxMaxId (no cap on backlog size)
 				const newMessages: NewMessage[] = [];
-				for (const msg of rawMessages) {
-					if (!msg || !msg.id) continue;
+				let offsetId = 0;
+				let keepFetching = true;
 
-					const postedAt = msg.date ? new Date(msg.date * 1000) : new Date();
-					const textContent = typeof msg.message === 'string' ? msg.message : '';
-					const hasMedia = Boolean(msg.media);
+				while (keepFetching) {
+					const batch: any[] = await client.getMessages(entity, {
+						limit: 100,
+						minId: readInboxMaxId > 0 ? readInboxMaxId : undefined,
+						offsetId: offsetId > 0 ? offsetId : undefined
+					});
 
-					if (textContent || hasMedia) {
-						newMessages.push({
-							id: `${channelId}:${msg.id}`,
-							channelId,
-							telegramMessageId: Number(msg.id),
-							postedAt,
-							text: textContent,
-							hasMedia
-						});
+					if (!batch || batch.length === 0) {
+						break;
+					}
+
+					let addedFromBatch = 0;
+					for (const msg of batch) {
+						if (!msg || !msg.id) continue;
+
+						const msgId = Number(msg.id);
+						// Stop if we hit a message at or below readInboxMaxId
+						if (readInboxMaxId > 0 && msgId <= readInboxMaxId) {
+							keepFetching = false;
+							continue;
+						}
+
+						const postedAt = msg.date ? new Date(msg.date * 1000) : new Date();
+						const textContent = typeof msg.message === 'string' ? msg.message : '';
+						const hasMedia = Boolean(msg.media);
+
+						if (textContent || hasMedia) {
+							newMessages.push({
+								id: `${channelId}:${msg.id}`,
+								channelId,
+								telegramMessageId: msgId,
+								postedAt,
+								text: textContent,
+								hasMedia
+							});
+							addedFromBatch++;
+						}
+					}
+
+					if (batch.length < 100 || addedFromBatch === 0) {
+						keepFetching = false;
+					} else {
+						offsetId = Number(batch[batch.length - 1].id);
+						// Polite delay between batches for the same channel
+						await new Promise((r) => setTimeout(r, 200));
 					}
 				}
 
+				// 4. Save unread messages to Postgres (without marking as read in Telegram!)
 				if (newMessages.length > 0) {
 					await db.upsertMessages(newMessages);
 				}
@@ -200,15 +247,17 @@ export async function syncChannels(maxChannelsLimit = 20): Promise<{
 					count: newMessages.length
 				});
 
-				console.log(`[Sync] Synced channel "${channelName}" (${channelId}) with ${newMessages.length} messages.`);
+				console.log(`[Sync] Stored ${newMessages.length} unread messages for "${channelName}". (Left unread in Telegram)`);
+
+				// Pause between channels to strictly stay under MTProto rate limits
+				await new Promise((r) => setTimeout(r, 350));
 			} catch (err: any) {
 				console.error(`[Sync] Error syncing channel "${dialog.title}":`, err.message || err);
 			}
 		}
-	} finally {
-		try {
-			await client.disconnect();
-		} catch (_) {}
+	} catch (err: any) {
+		console.error('[Sync Error]', err);
+		throw err;
 	}
 
 	return {
@@ -394,15 +443,15 @@ export function startBot(): Bot | null {
 			const session = await db.getSession();
 			const channels = await db.getAllChannels();
 			const dayCards = await db.getDayCards();
-			const rawAllowlist = process.env.CHANNELS_ALLOWLIST || 'All subscribed channels';
+			const rawAllowlist = process.env.TRACKED_CHANNELS || process.env.CHANNELS_ALLOWLIST || 'All subscribed channels';
 
 			const statusMsg =
 				`**Sift Status**\n\n` +
 				`• **MTProto Session**: ${session ? 'Connected' : 'Not logged in'}\n` +
-				`• **Channel Filter**: \`${rawAllowlist}\`\n` +
+				`• **Tracked Channels**: \`${rawAllowlist}\`\n` +
 				`• **Channels in DB**: ${channels.length}\n` +
 				`• **Daily Cards**: ${dayCards.length}\n` +
-				`• **Web App URL**: ${process.env.WEBAPP_URL || 'Not configured'}`;
+				`• **Web App URL**: ${getCleanWebAppUrl() || 'Not configured'}`;
 
 			const keyboard = new InlineKeyboard();
 			if (process.env.WEBAPP_URL) {
@@ -777,6 +826,52 @@ export function disconnectSharedClient() {
 		sharedSessionString = null;
 	}
 	mediaMemoryCache.clear();
+}
+
+export const getSharedGramJsClient = getSharedClient;
+export { getSharedClient };
+
+/**
+ * Marks a channel as read in Telegram (clears Telegram's own unread badge).
+ * Called at VIEW TIME when opening the timeline route in Sift.
+ */
+export async function markChannelAsRead(channelIdOrHandle: string, maxId = 0): Promise<boolean> {
+	try {
+		const client = await getSharedClient();
+		if (!client) return false;
+
+		const entity = await client.getInputEntity(channelIdOrHandle).catch(async () => {
+			return await client?.getEntity(channelIdOrHandle);
+		}).catch(() => null);
+
+		if (!entity) return false;
+
+		// GramJS markAsRead sends ReadHistory request to Telegram
+		await client.markAsRead(entity as any, maxId || undefined).catch(async () => {
+			await client?.send(
+				new Api.channels.ReadHistory({
+					channel: entity as any,
+					maxId: maxId || 0
+				})
+			).catch(() => {});
+		});
+
+		console.log(`[ReadHistory] Marked channel ${channelIdOrHandle} as read in Telegram at view-time.`);
+		return true;
+	} catch (err: any) {
+		console.warn(`[ReadHistory Error] Failed to mark channel ${channelIdOrHandle} as read:`, err?.message);
+		return false;
+	}
+}
+
+/**
+ * Marks multiple channels as read in Telegram at view-time
+ */
+export async function markChannelsAsRead(channelIds: string[]): Promise<void> {
+	for (const id of channelIds) {
+		await markChannelAsRead(id);
+		await new Promise((r) => setTimeout(r, 100));
+	}
 }
 
 /**

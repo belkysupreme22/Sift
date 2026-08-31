@@ -9,7 +9,7 @@ export const GET: RequestHandler = async () => {
 		timestamp: string;
 		database: { connected: boolean; sessionExists: boolean; channelCount?: number; storyCount?: number; error?: string };
 		bot: { configured: boolean; botUser?: string; error?: string };
-		env: { webappUrl: string; hasTgApiId: boolean; hasTgApiHash: boolean; hasBotToken: boolean; hasDbUrl: boolean };
+		env: { webappUrl: string; trackedChannels: string; hasTgApiId: boolean; hasTgApiHash: boolean; hasBotToken: boolean; hasDbUrl: boolean };
 	} = {
 		status: 'ok',
 		timestamp: new Date().toISOString(),
@@ -17,6 +17,7 @@ export const GET: RequestHandler = async () => {
 		bot: { configured: false },
 		env: {
 			webappUrl: getCleanWebAppUrl(),
+			trackedChannels: process.env.TRACKED_CHANNELS || process.env.CHANNELS_ALLOWLIST || 'All subscribed channels',
 			hasTgApiId: Boolean(process.env.TG_API_ID),
 			hasTgApiHash: Boolean(process.env.TG_API_HASH),
 			hasBotToken: Boolean(process.env.BOT_TOKEN),
