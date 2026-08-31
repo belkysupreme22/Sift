@@ -481,6 +481,19 @@
 		activeLightboxImage = null;
 	}
 
+	function formatStoryDateTime(postedAt: string | Date): { dayName: string; shortDate: string; time: string; full: string } {
+		const d = typeof postedAt === 'string' ? new Date(postedAt) : postedAt;
+		const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+		const shortDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+		const time = formatMessageTime(d);
+		return {
+			dayName,
+			shortDate,
+			time,
+			full: `${dayName}, ${shortDate} • ${time}`
+		};
+	}
+
 	function switchTimeView(newView: 'day' | 'week' | 'month') {
 		timeView = newView;
 		visibleGroupsCount = 15;
@@ -1283,13 +1296,17 @@
 													<button
 														type="button"
 														onclick={() => selectChannel(msg.channelId)}
-														class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer truncate max-w-[200px]"
+														class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer truncate max-w-[180px]"
 														style="color: {chColor}; background: {chColor}15; border-color: {chColor}30;"
 														title="Filter by @{msg.channelName}"
 													>
 														@{msg.channelName}
 													</button>
-													<span class="text-[11px] text-[#6b7080] font-mono shrink-0">{formatMessageTime(msg.postedAt)}</span>
+													<div class="flex items-center gap-1.5 text-[11px] font-mono shrink-0">
+														<span class="text-[#9ca3af] font-medium">{formatStoryDateTime(msg.postedAt).dayName}, {formatStoryDateTime(msg.postedAt).shortDate}</span>
+														<span class="text-white/20">•</span>
+														<span class="text-[#6b7080]">{formatStoryDateTime(msg.postedAt).time}</span>
+													</div>
 												</div>
 
 												<!-- Hover / Touch Actions Bar -->
@@ -1317,7 +1334,7 @@
 													<!-- Open in Focus Reader Detail Dialog -->
 													<button
 														type="button"
-														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
 														class="p-1.5 rounded hover:bg-white/[0.08] text-[#8e93a2] hover:text-[#f43f5e] transition-colors cursor-pointer"
 														title="Open in Zen Focus Reader (marks as read)"
 													>
@@ -1345,7 +1362,7 @@
 												<div class="flex flex-col gap-1.5">
 													<p
 														class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans cursor-pointer hover:text-white transition-colors"
-														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
 													>
 														{isLongText && !isExpanded ? msg.text.slice(0, 260) + '...' : msg.text}
 													</p>
@@ -1366,7 +1383,7 @@
 															</button>
 															<button
 																type="button"
-																onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+																onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
 																class="text-xs text-[#8e93a2] hover:text-white transition-colors cursor-pointer"
 															>
 																Open in reader →
@@ -1589,7 +1606,7 @@
 									/>
 									<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2.5 z-10 text-left">
 										<span class="text-[10px] font-bold truncate text-white" style="color: {chColor};">@{item.channelName}</span>
-										<span class="text-[9px] text-[#9a9ea8] font-mono">{formatMessageTime(item.postedAt)}</span>
+										<span class="text-[9px] text-[#9a9ea8] font-mono">{formatStoryDateTime(item.postedAt).full}</span>
 									</div>
 								</button>
 							{/each}
