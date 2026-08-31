@@ -644,8 +644,30 @@
 		return groupCardsByView(cards, timeView);
 	});
 
+	// Channel filter state: Active only (default) vs All
+	let channelFilterMode = $state<'active' | 'all'>('active');
+
+	let sortedChannels = $derived.by(() => {
+		const list = (data.channels || []).map((ch) => {
+			const count = channelCounts[ch.id] || channelCounts[ch.name] || 0;
+			return { ...ch, count };
+		});
+
+		// Sort channels with active unread stories on top, then descending by story count, then alphabetical
+		list.sort((a, b) => {
+			if (b.count !== a.count) return b.count - a.count;
+			return a.name.localeCompare(b.name);
+		});
+
+		if (channelFilterMode === 'active') {
+			const activeOnly = list.filter((ch) => ch.count > 0);
+			return activeOnly.length > 0 ? activeOnly : list;
+		}
+		return list;
+	});
+
 	let visibleGroups = $derived(allGroups.slice(0, visibleGroupsCount));
-	let visibleChannels = $derived((data.channels || []).slice(0, visibleChannelsCount));
+	let visibleChannels = $derived(sortedChannels.slice(0, visibleChannelsCount));
 
 	let mediaItems = $derived.by(() => {
 		const items: Array<{ channelName: string; text: string; postedAt: Date; id: string; rawMsg: any }> = [];
@@ -1406,12 +1428,29 @@
 			<!-- SCENARIO C: CHANNELS DIRECTORY -->
 			{:else if activeTab === 'channels'}
 				<div class="flex flex-col gap-6 w-full min-w-0">
-					<div class="flex items-center justify-between">
+					<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
 						<div>
 							<h2 class="text-base font-bold text-white tracking-tight">Subscribed Channels</h2>
 							<p class="text-xs text-[#8e93a2]">All channels included in your daily timeline stream</p>
 						</div>
-						<span class="text-xs font-mono bg-white/[0.04] border border-white/[0.08] px-3 py-1 rounded-xl text-[#a6abb8]">{data.channels?.length || 0} Channels</span>
+						<div class="flex items-center gap-2 shrink-0">
+							<div class="flex items-center p-0.5 bg-[#13151f] border border-white/[0.08] rounded-xl text-xs font-medium text-[#7d8290]">
+								<button
+									type="button"
+									onclick={() => { channelFilterMode = 'active'; triggerHaptic(); }}
+									class="px-2.5 py-1 rounded-lg transition-all cursor-pointer {channelFilterMode === 'active' ? 'bg-[#222533] text-white font-semibold shadow-sm' : 'hover:text-white'}"
+								>
+									Active Only
+								</button>
+								<button
+									type="button"
+									onclick={() => { channelFilterMode = 'all'; triggerHaptic(); }}
+									class="px-2.5 py-1 rounded-lg transition-all cursor-pointer {channelFilterMode === 'all' ? 'bg-[#222533] text-white font-semibold shadow-sm' : 'hover:text-white'}"
+								>
+									All ({data.channels?.length || 0})
+								</button>
+							</div>
+						</div>
 					</div>
 
 					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 w-full min-w-0">
