@@ -26,21 +26,51 @@ function getTgCredentials() {
 	return { apiId, apiHash, botToken };
 }
 
+let activeBotInstance: Bot | null = null;
+
+export function getBot(): Bot | null {
+	if (!activeBotInstance) {
+		const { botToken } = getTgCredentials();
+		if (!botToken) return null;
+		activeBotInstance = new Bot(botToken);
+	}
+	return activeBotInstance;
+}
+
 /**
- * Safely adds a WebApp or standard URL button based on Telegram Bot API rules
+ * Returns a sanitized base URL for the WebApp/browser links without trailing slashes
  */
-function addAppButton(keyboard: InlineKeyboard, text: string, url: string) {
+export function getCleanWebAppUrl(path = ''): string {
+	let base = (process.env.WEBAPP_URL || '').trim();
+	if (!base) return '';
+	base = base.replace(/\/+$/, '');
+	if (!path) return base;
+	const cleanPath = path.startsWith('/') ? path : `/${path}`;
+	return `${base}${cleanPath}`;
+}
+
+/**
+ * Safely adds both WebApp (Mini App) and Direct Web Browser URL buttons based on Telegram Bot API rules
+ */
+function addAppButton(keyboard: InlineKeyboard, text: string, pathOrUrl = '') {
+	let url = pathOrUrl.trim();
+	if (!url.startsWith('http://') && !url.startsWith('https://')) {
+		url = getCleanWebAppUrl(pathOrUrl);
+	}
 	if (!url) return keyboard;
+
 	const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
 	if (isLocal) {
 		// Telegram Bot API strictly forbids 'localhost' in inline keyboard buttons
 		return keyboard;
 	}
 	if (url.startsWith('https://')) {
-		return keyboard.webApp(text, url);
+		keyboard.webApp(text, url).url('🌐 Browser Link', url);
+		return keyboard;
 	}
 	if (url.startsWith('http://')) {
-		return keyboard.url(text, url);
+		keyboard.url(text, url);
+		return keyboard;
 	}
 	return keyboard;
 }
@@ -198,6 +228,7 @@ export function startBot(): Bot | null {
 	}
 
 	const bot = new Bot(botToken);
+	activeBotInstance = bot;
 
 	// Register command list and bot description with Telegram
 	bot.api
@@ -253,7 +284,7 @@ export function startBot(): Bot | null {
 
 		const existingSession = await db.getSession();
 		if (existingSession && existingSession.sessionString) {
-			const webAppUrl = (process.env.WEBAPP_URL || '').trim();
+			const webAppUrl = getCleanWebAppUrl('/');
 			const isLocal = webAppUrl.includes('localhost') || webAppUrl.includes('127.0.0.1');
 			const keyboard = new InlineKeyboard();
 
@@ -282,8 +313,9 @@ export function startBot(): Bot | null {
 		authStates.set(userId, { step: 'awaiting_phone' });
 
 		const keyboard = new InlineKeyboard();
-		if (process.env.WEBAPP_URL) {
-			addAppButton(keyboard, '⚡ Web Login (Recommended)', `${process.env.WEBAPP_URL}/login`).row();
+		const webAppUrl = getCleanWebAppUrl('/login');
+		if (webAppUrl) {
+			addAppButton(keyboard, '⚡ Web Login (Recommended)', webAppUrl).row();
 		}
 
 		await ctx.reply(
@@ -669,19 +701,41 @@ export function startBot(): Bot | null {
 		console.error('[Bot Global Error]', err);
 	});
 
-	// Start long-polling in background
-	console.log('[Bot] Starting Telegram bot long-polling...');
-	bot.start({
-		onStart: (botInfo) => {
-			console.log(`[Bot] @${botInfo.username} is now online and listening!`);
+	// Start long-polling in background with webhook cleanup and auto-recovery
+	let isPollingRunning = false;
+
+	async function launchPolling() {
+		if (isPollingRunning) return;
+		isPollingRunning = true;
+
+		try {
+			console.log('[Bot] Deleting any existing Telegram webhooks to ensure getUpdates long-polling starts cleanly...');
+			await bot.api.deleteWebhook({ drop_pending_updates: false }).catch((err) => {
+				console.warn('[Bot] Note on deleteWebhook:', err?.message);
+			});
+
+			console.log('[Bot] Starting Telegram bot long-polling...');
+			await bot.start({
+				drop_pending_updates: false,
+				onStart: (botInfo) => {
+					console.log(`[Bot] @${botInfo.username} is now online and listening for updates!`);
+				}
+			});
+		} catch (err: any) {
+			isPollingRunning = false;
+			if (err?.message === 'Aborted delay' || err?.name === 'AbortError') {
+				console.log('[Bot] Long-polling stopped cleanly.');
+				return;
+			}
+			console.error('[Bot Start Error]', err);
+			console.log('[Bot] Will retry bot long-polling in 5 seconds...');
+			setTimeout(() => {
+				launchPolling();
+			}, 5000);
 		}
-	}).catch((err) => {
-		if (err?.message === 'Aborted delay' || err?.name === 'AbortError') {
-			console.log('[Bot] Long-polling stopped cleanly.');
-			return;
-		}
-		console.error('[Bot Start Error]', err);
-	});
+	}
+
+	launchPolling();
 
 	return bot;
 }
