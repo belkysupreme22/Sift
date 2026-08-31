@@ -19,9 +19,10 @@ interface AuthState {
 const authStates = new Map<number, AuthState>();
 
 function getTgCredentials() {
-	const apiId = parseInt(process.env.TG_API_ID || '0', 10);
-	const apiHash = process.env.TG_API_HASH || '';
-	const botToken = process.env.BOT_TOKEN || '';
+	const rawApiId = (process.env.TG_API_ID || '').trim().replace(/^["']|["']$/g, '');
+	const apiId = parseInt(rawApiId || '0', 10);
+	const apiHash = (process.env.TG_API_HASH || '').trim().replace(/^["']|["']$/g, '');
+	const botToken = (process.env.BOT_TOKEN || '').trim().replace(/^["']|["']$/g, '');
 
 	return { apiId, apiHash, botToken };
 }
