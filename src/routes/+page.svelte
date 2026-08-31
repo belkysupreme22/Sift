@@ -835,7 +835,7 @@
 					</div>
 					<div class="hidden lg:flex flex-col min-w-0 flex-1 overflow-hidden">
 						<span class="text-xs font-semibold text-white truncate block">{data.account?.name || 'Connected'}</span>
-						<span class="text-[10px] text-[#6b707f] font-mono truncate block">{data.account?.username ? '@' + data.account.username : 'MTProto Active'}</span>
+						<span class="text-[10px] text-[#6b707f] font-mono truncate block">{data.account?.username ? '@' + data.account.username : 'Active'}</span>
 					</div>
 				</button>
 			{:else}
@@ -1324,7 +1324,7 @@
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-bold text-white tracking-tight">Subscribed Channels</h2>
-							<p class="text-xs text-[#8e93a2]">Channels configured in <code class="text-[#f43f5e] font-mono text-[11px]">TRACKED_CHANNELS</code></p>
+							<p class="text-xs text-[#8e93a2]">All channels included in your daily timeline stream</p>
 						</div>
 						<span class="text-xs font-mono bg-white/[0.04] border border-white/[0.08] px-3 py-1 rounded-xl text-[#a6abb8]">{data.channels?.length || 0} Channels</span>
 					</div>
@@ -1342,7 +1342,6 @@
 										</div>
 										<div class="flex flex-col min-w-0 flex-1 overflow-hidden">
 											<span class="text-xs font-bold text-white truncate block" title={channel.name}>{channel.name}</span>
-											<span class="text-[10px] text-[#6b7080] font-mono truncate block">ID: {channel.id}</span>
 										</div>
 									</div>
 									{#if msgCount > 0}
@@ -1389,7 +1388,7 @@
 						<div class="surface-card rounded-2xl p-5 flex flex-col gap-1">
 							<span class="text-xs text-[#8e93a2]">Tracked Channels</span>
 							<span class="text-2xl font-bold text-white font-mono">{data.stats.channelCount}</span>
-							<span class="text-[11px] text-emerald-400 font-mono mt-1">100% MTProto health</span>
+							<span class="text-[11px] text-emerald-400 font-mono mt-1">Active & Synced</span>
 						</div>
 
 						<div class="surface-card rounded-2xl p-5 flex flex-col gap-1">
@@ -1532,7 +1531,7 @@
 					</div>
 					<div class="flex flex-col">
 						<h3 class="text-sm font-bold text-white">{data.account?.name || 'Connected Account'}</h3>
-						<span class="text-xs text-[#6b7080] font-mono">{data.account?.username ? '@' + data.account.username : 'MTProto Active'}</span>
+						<span class="text-xs text-[#6b7080] font-mono">{data.account?.username ? '@' + data.account.username : 'Active'}</span>
 					</div>
 				</div>
 				<button type="button" onclick={() => isAccountModalOpen = false} class="text-xs text-[#828796] hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.05] cursor-pointer">Close</button>
