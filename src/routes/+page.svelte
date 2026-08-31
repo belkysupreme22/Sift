@@ -503,18 +503,34 @@
 		triggerHaptic();
 
 		try {
-			syncFeedback = 'Scanning channel dialogs...';
+			syncFeedback = 'Syncing channel updates...';
 			const res = await fetch('/api/sync', { method: 'POST' });
-			const result = await res.json();
-			if (!res.ok) {
-				throw new Error(result.error || 'Sync failed');
+			const rawText = await res.text();
+			let result: any = null;
+			try {
+				result = JSON.parse(rawText);
+			} catch (_) {
+				// Proxy returned HTML (e.g. 504 Gateway Timeout or 502)
+				if (res.status === 504 || res.status === 502 || res.status === 499) {
+					syncFeedback = 'Sync running in background... Refreshing timeline.';
+					setTimeout(() => {
+						window.location.reload();
+					}, 1800);
+					return;
+				}
+				throw new Error(`Server returned status ${res.status}`);
 			}
+
+			if (!res.ok) {
+				throw new Error(result?.error || 'Sync failed');
+			}
+
 			syncFeedback = `Synced ${result.syncedChannelsCount} channels (${result.totalMessagesCount} stories)`;
 			setTimeout(() => {
 				window.location.reload();
 			}, 800);
 		} catch (err: any) {
-			syncFeedback = `Sync error: ${err.message}`;
+			syncFeedback = `Sync: ${err.message}`;
 		} finally {
 			isSyncing = false;
 		}

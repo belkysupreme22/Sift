@@ -188,6 +188,15 @@ export async function syncChannels(): Promise<{
 					await db.removeReadMessages(channelId, readInboxMaxId);
 				}
 
+				// If channel is already fully read in Telegram, skip network getMessages call to finish sync in seconds
+				if (unreadCount === 0 && readInboxMaxId > 0) {
+					channelsDetail.push({
+						name: channelName,
+						count: 0
+					});
+					continue;
+				}
+
 				// 3. Pull all messages newer than readInboxMaxId (no cap on backlog size)
 				const newMessages: NewMessage[] = [];
 				let offsetId = 0;
@@ -195,7 +204,7 @@ export async function syncChannels(): Promise<{
 
 				while (keepFetching) {
 					const batch: any[] = await client.getMessages(entity, {
-						limit: 100,
+						limit: unreadCount > 0 ? Math.min(100, unreadCount) : 100,
 						minId: readInboxMaxId > 0 ? readInboxMaxId : undefined,
 						offsetId: offsetId > 0 ? offsetId : undefined
 					});
@@ -232,12 +241,12 @@ export async function syncChannels(): Promise<{
 						}
 					}
 
-					if (batch.length < 100 || addedFromBatch === 0) {
+					if (batch.length < 100 || addedFromBatch === 0 || newMessages.length >= unreadCount) {
 						keepFetching = false;
 					} else {
 						offsetId = Number(batch[batch.length - 1].id);
-						// Polite delay between batches for the same channel
-						await new Promise((r) => setTimeout(r, 200));
+						// Small polite delay between pagination batches
+						await new Promise((r) => setTimeout(r, 100));
 					}
 				}
 
@@ -254,8 +263,8 @@ export async function syncChannels(): Promise<{
 
 				console.log(`[Sync] Stored ${newMessages.length} unread messages for "${channelName}". (Left unread in Telegram)`);
 
-				// Pause between channels to strictly stay under MTProto rate limits
-				await new Promise((r) => setTimeout(r, 350));
+				// Small polite delay between active channels
+				await new Promise((r) => setTimeout(r, 100));
 			} catch (err: any) {
 				console.error(`[Sync] Error syncing channel "${dialog.title}":`, err.message || err);
 			}
