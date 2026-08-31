@@ -782,11 +782,18 @@ export function startBot(): Bot | null {
 				console.log('[Bot] Long-polling stopped cleanly.');
 				return;
 			}
+
+			// Handle 401 Unauthorized cleanly without spamming every 5 seconds
+			if (err?.error_code === 401 || err?.description?.includes('Unauthorized') || err?.message?.includes('401')) {
+				console.warn('[Bot Warning] BOT_TOKEN is unauthorized (401). Bot polling is paused until a valid token is provided in environment variables.');
+				return;
+			}
+
 			console.error('[Bot Start Error]', err);
-			console.log('[Bot] Will retry bot long-polling in 5 seconds...');
+			console.log('[Bot] Will retry bot long-polling in 30 seconds...');
 			setTimeout(() => {
 				launchPolling();
-			}, 5000);
+			}, 30000);
 		}
 	}
 
@@ -822,6 +829,27 @@ async function getSharedClient(): Promise<TelegramClient | null> {
 	}
 }
 
+let cachedUserInfo: { name: string; username?: string; initial: string } | null = null;
+
+export async function getConnectedUserInfo(): Promise<{ name: string; username?: string; initial: string } | null> {
+	if (cachedUserInfo) return cachedUserInfo;
+	try {
+		const client = await getSharedClient();
+		if (!client) return null;
+		const me: any = await client.getMe().catch(() => null);
+		if (!me) return null;
+		const firstName = me.firstName || '';
+		const lastName = me.lastName || '';
+		const username = me.username || '';
+		const fullName = `${firstName} ${lastName}`.trim() || username || 'Telegram User';
+		const initial = (firstName[0] || username[0] || fullName[0] || 'T').toUpperCase();
+		cachedUserInfo = { name: fullName, username, initial };
+		return cachedUserInfo;
+	} catch {
+		return null;
+	}
+}
+
 export function disconnectSharedClient() {
 	if (sharedMtprotoClient) {
 		try {
@@ -830,6 +858,7 @@ export function disconnectSharedClient() {
 		sharedMtprotoClient = null;
 		sharedSessionString = null;
 	}
+	cachedUserInfo = null;
 	mediaMemoryCache.clear();
 }
 

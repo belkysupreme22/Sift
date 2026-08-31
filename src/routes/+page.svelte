@@ -40,7 +40,8 @@
 		ExternalLink,
 		Clock,
 		Flame,
-		CheckCircle
+		CheckCircle,
+		BookOpen
 	} from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -55,6 +56,9 @@
 	let isAccountModalOpen = $state(false);
 	let isZenReaderOpen = $state(false);
 	let zenStory = $state<{ title: string; channelName: string; text: string; time: string; channelColor: string } | null>(null);
+
+	// Expandable long stories state
+	let expandedStoryIds = $state<Set<string>>(new Set());
 
 	// Interactive Onboarding Tour State
 	let isOnboardingOpen = $state(false);
@@ -107,17 +111,17 @@
 		{
 			targetSelector: '#tour-sync-btn',
 			preferredPlacement: 'bottom' as const,
-			tag: 'Unread Sync & Status',
+			tag: 'Sync & Status',
 			title: 'Manual Sync & Account Status',
-			description: 'Click Sync anytime to pull the newest unread messages from your tracked channels. Opening channels in Sift automatically clears their unread badges in Telegram.',
-			tip: 'Sift automatically removes already-read messages to keep your inbox strictly focused.',
+			description: 'Click Sync anytime to pull the newest messages from your tracked channels. Opening channels in Sift automatically clears their badges in Telegram.',
+			tip: 'Sift keeps your chronological timeline organized and lightning fast.',
 			badge: 'Step 5 of 5'
 		}
 	];
 
 	// Pagination & Infinite Scroll state
 	let visibleGroupsCount = $state(15);
-	let visibleChannelsCount = $state(20);
+	let visibleChannelsCount = $state(30);
 	let expandedGroupLimits = $state<Record<string, number>>({});
 	let isSyncing = $state(false);
 	let syncFeedback = $state('');
@@ -141,7 +145,7 @@
 
 			// Check first-time user tour (only if logged in)
 			if (data.isLoggedIn) {
-				const tourSeen = localStorage.getItem('sift_tour_completed_v2');
+				const tourSeen = localStorage.getItem('sift_tour_completed_v3');
 				if (!tourSeen) {
 					setTimeout(() => {
 						startOnboardingTour();
@@ -262,6 +266,17 @@
 		} catch (_) {}
 	}
 
+	function toggleStoryExpand(storyId: string) {
+		const newSet = new Set(expandedStoryIds);
+		if (newSet.has(storyId)) {
+			newSet.delete(storyId);
+		} else {
+			newSet.add(storyId);
+		}
+		expandedStoryIds = newSet;
+		triggerHaptic();
+	}
+
 	function startOnboardingTour() {
 		isOnboardingOpen = true;
 		onboardingStep = 0;
@@ -275,7 +290,7 @@
 		isOnboardingOpen = false;
 		spotlightRect = null;
 		try {
-			localStorage.setItem('sift_tour_completed_v2', 'true');
+			localStorage.setItem('sift_tour_completed_v3', 'true');
 		} catch (_) {}
 		triggerHaptic();
 	}
@@ -488,13 +503,13 @@
 		triggerHaptic();
 
 		try {
-			syncFeedback = 'Scanning unread channel dialogs...';
+			syncFeedback = 'Scanning channel dialogs...';
 			const res = await fetch('/api/sync', { method: 'POST' });
 			const result = await res.json();
 			if (!res.ok) {
 				throw new Error(result.error || 'Sync failed');
 			}
-			syncFeedback = `Synced ${result.syncedChannelsCount} channels (${result.totalMessagesCount} unread stories)`;
+			syncFeedback = `Synced ${result.syncedChannelsCount} channels (${result.totalMessagesCount} stories)`;
 			setTimeout(() => {
 				window.location.reload();
 			}, 800);
@@ -608,8 +623,8 @@
 </script>
 
 <svelte:head>
-	<title>Sift — Strictly Unread Telegram Channel Timeline</title>
-	<meta name="description" content="Chronological unread reader for Telegram channels with zero AI loss." />
+	<title>Sift — Telegram Channel Timeline</title>
+	<meta name="description" content="Chronological reader for Telegram channels with zero AI loss." />
 	<style>
 		@keyframes pulseGlow {
 			0%, 100% {
@@ -691,7 +706,6 @@
 					<span class="text-[10px] text-[#717684] font-medium tracking-wide">Channel Timeline</span>
 				</div>
 			</button>
-			<span class="hidden lg:inline text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-semibold">Unread Mode</span>
 		</div>
 
 		<!-- Main 5 Navigation Tabs -->
@@ -768,7 +782,12 @@
 				class="md:hidden flex-1 flex items-center justify-center p-2 text-[#828796] hover:text-white"
 				title="Account & Settings"
 			>
-				<UserCheck class="w-4 h-4" />
+				<div class="w-7 h-7 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 p-[1.5px] relative shrink-0">
+					<div class="w-full h-full rounded-full bg-[#0c0d13] flex items-center justify-center text-[10px] font-bold text-white">
+						{data.account?.initial || 'T'}
+					</div>
+					<div class="w-2 h-2 rounded-full bg-emerald-400 border-2 border-[#0c0d13] absolute bottom-0 right-0"></div>
+				</div>
 			</button>
 		</nav>
 
@@ -783,21 +802,24 @@
 					class="w-full flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.07] text-xs text-[#9aa0b0] hover:text-white transition-all disabled:opacity-50 cursor-pointer"
 				>
 					<RefreshCw class="w-4 h-4 text-[#f43f5e] shrink-0 {isSyncing ? 'animate-spin' : ''}" />
-					<span class="hidden lg:inline font-medium">{isSyncing ? 'Syncing...' : 'Sync Unread'}</span>
+					<span class="hidden lg:inline font-medium">{isSyncing ? 'Syncing...' : 'Sync'}</span>
 				</button>
 
 				<button
 					type="button"
 					onclick={() => { isAccountModalOpen = true; triggerHaptic(); }}
-					class="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition-all text-left cursor-pointer"
+					class="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition-all text-left cursor-pointer group"
+					title="Account Settings"
 				>
-					<div class="w-7 h-7 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 p-[1px] relative shrink-0">
-						<div class="w-full h-full rounded-full bg-[#0c0d13] flex items-center justify-center text-[10px] font-bold text-white">TG</div>
-						<div class="w-2 h-2 rounded-full bg-emerald-400 border-2 border-[#0c0d13] absolute bottom-0 right-0"></div>
+					<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 p-[1.5px] relative shrink-0">
+						<div class="w-full h-full rounded-full bg-[#0c0d13] flex items-center justify-center text-xs font-bold text-white">
+							{data.account?.initial || 'T'}
+						</div>
+						<div class="w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0c0d13] absolute -bottom-0.5 -right-0.5"></div>
 					</div>
-					<div class="hidden lg:flex flex-col min-w-0">
-						<span class="text-xs font-semibold text-white truncate">Connected</span>
-						<span class="text-[10px] text-[#6b707f] font-mono truncate">MTProto Active</span>
+					<div class="hidden lg:flex flex-col min-w-0 flex-1 overflow-hidden">
+						<span class="text-xs font-semibold text-white truncate block">{data.account?.name || 'Connected'}</span>
+						<span class="text-[10px] text-[#6b707f] font-mono truncate block">{data.account?.username ? '@' + data.account.username : 'MTProto Active'}</span>
 					</div>
 				</button>
 			{:else}
@@ -893,7 +915,6 @@
 			<div class="flex items-center gap-2 shrink-0">
 				
 				{#if data.isLoggedIn}
-					<!-- Tour Trigger -->
 					<button
 						type="button"
 						onclick={startOnboardingTour}
@@ -947,7 +968,7 @@
 							type="button"
 							onclick={() => toggleWeekday(wd.day)}
 							class="px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 {isSelected ? 'bg-[#f43f5e] text-white font-semibold shadow-md shadow-[#f43f5e]/20' : 'bg-white/[0.03] text-[#8e93a2] hover:text-white border border-white/[0.06]'}"
-							title="{wd.label} ({count} unread)"
+							title="{wd.label} ({count} stories)"
 						>
 							<span>{wd.short}</span>
 							{#if count > 0}
@@ -975,7 +996,7 @@
 		{/if}
 
 		<!-- VIEW SECTIONS -->
-		<div class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col max-w-4xl mx-auto w-full">
+		<div class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col max-w-5xl mx-auto w-full">
 			
 			<!-- SCENARIO A: NOT CONNECTED / UNINITIALIZED ONBOARDING HERO -->
 			{#if !data.isLoggedIn}
@@ -987,10 +1008,10 @@
 
 					<div class="flex flex-col gap-2 max-w-lg">
 						<h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">
-							Strictly Unread Telegram Channel Inbox
+							Telegram Channel Timeline
 						</h1>
 						<p class="text-xs sm:text-sm text-[#8e93a2] leading-relaxed">
-							Sift aggregates updates from your subscribed channels into a clean chronological timeline. Only unread stories are stored — no infinite doomscroll or algorithmic distortion.
+							Sift aggregates updates from your subscribed channels into a clean chronological timeline with zero distortion.
 						</p>
 					</div>
 
@@ -999,30 +1020,30 @@
 						<div class="surface-card rounded-2xl p-4 flex flex-col gap-1.5">
 							<div class="flex items-center gap-2 text-[#38bdf8]">
 								<CheckCircle class="w-4 h-4" />
-								<span class="text-xs font-bold text-white">Strictly Unread Catch-Up</span>
+								<span class="text-xs font-bold text-white">Chronological Timeline</span>
 							</div>
 							<p class="text-xs text-[#8e93a2] leading-relaxed">
-								Stories disappear as soon as you view them. Zero noise from channels you already read.
+								Day, Week, and Month chronological views to inspect your channel updates at your preferred pace.
 							</p>
 						</div>
 
 						<div class="surface-card rounded-2xl p-4 flex flex-col gap-1.5">
 							<div class="flex items-center gap-2 text-[#fbbf24]">
 								<Sparkles class="w-4 h-4" />
-								<span class="text-xs font-bold text-white">100% Text & Script Fidelity</span>
+								<span class="text-xs font-bold text-white">100% Script Fidelity</span>
 							</div>
 							<p class="text-xs text-[#8e93a2] leading-relaxed">
-								Full Amharic, Ge'ez, Arabic, and Latin multi-lingual script rendering without AI alteration.
+								Full Amharic, Ge'ez, Arabic, and Latin multi-lingual script rendering without alteration.
 							</p>
 						</div>
 
 						<div class="surface-card rounded-2xl p-4 flex flex-col gap-1.5">
 							<div class="flex items-center gap-2 text-emerald-400">
 								<CheckCircle2 class="w-4 h-4" />
-								<span class="text-xs font-bold text-white">View-Time Badge Clearing</span>
+								<span class="text-xs font-bold text-white">View-Time Badge Sync</span>
 							</div>
 							<p class="text-xs text-[#8e93a2] leading-relaxed">
-								Opening the timeline in Sift automatically clears Telegram's native unread notification badges.
+								Opening channels in Sift clears Telegram's native notification badge counts.
 							</p>
 						</div>
 
@@ -1097,7 +1118,7 @@
 								{:else if selectedChannelFilter || selectedWeekdays.length > 0 || searchQuery}
 									Try clearing your search query or selecting additional days of the week.
 								{:else}
-									Zero unread stories. You are completely up to date across all your tracked channels!
+									You are completely up to date across all your tracked channels!
 								{/if}
 							</p>
 						</div>
@@ -1118,7 +1139,7 @@
 								class="px-5 py-2.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 flex items-center gap-2 cursor-pointer"
 							>
 								<RefreshCw class="w-3.5 h-3.5 {isSyncing ? 'animate-spin' : ''}" />
-								<span>Sync Latest Messages</span>
+								<span>Sync Latest Stories</span>
 							</button>
 						{/if}
 					</div>
@@ -1139,12 +1160,10 @@
 									<div class="flex items-center gap-2.5">
 										<div class="w-2.5 h-2.5 rounded-full {group.isToday ? 'bg-[#f43f5e] node-light' : 'bg-[#6b7080]'}"></div>
 										<span class="text-xs sm:text-sm font-bold text-white tracking-tight">{group.formattedDate}</span>
-										<span class="text-[11px] text-[#7d8290] font-mono">({group.messages.length} unread)</span>
+										<span class="text-[11px] text-[#7d8290] font-mono">({group.messages.length} {group.messages.length === 1 ? 'story' : 'stories'})</span>
 									</div>
 									<div class="flex items-center gap-2 text-[11px] text-[#8e93a2] font-medium">
-										<span>⏱ ~{Math.max(1, Math.round(group.messages.length * 0.3))} min</span>
-										<span class="hidden sm:inline text-white/20">•</span>
-										<span class="hidden sm:inline text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">Auto-Cleared</span>
+										<span>⏱ ~{Math.max(1, Math.round(group.messages.length * 0.3))} min read</span>
 									</div>
 								</div>
 
@@ -1153,6 +1172,8 @@
 									{#each visibleMessages as msg (msg.id)}
 										{@const isStarred = starredIds.has(msg.id)}
 										{@const chColor = getChannelColor(msg.channelName)}
+										{@const isLongText = (msg.text || '').length > 280}
+										{@const isExpanded = expandedStoryIds.has(msg.id)}
 
 										<article
 											id="tour-story-item"
@@ -1160,21 +1181,21 @@
 										>
 											<!-- Channel Attribution & Quick Action Bar -->
 											<div class="flex items-center justify-between">
-												<div class="flex items-center gap-2">
+												<div class="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
 													<button
 														type="button"
 														onclick={() => selectChannel(msg.channelId)}
-														class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer"
+														class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer truncate max-w-[200px]"
 														style="color: {chColor}; background: {chColor}15; border-color: {chColor}30;"
 														title="Filter by @{msg.channelName}"
 													>
 														@{msg.channelName}
 													</button>
-													<span class="text-[11px] text-[#6b7080] font-mono">{formatMessageTime(msg.postedAt)}</span>
+													<span class="text-[11px] text-[#6b7080] font-mono shrink-0">{formatMessageTime(msg.postedAt)}</span>
 												</div>
 
 												<!-- Hover / Touch Actions Bar -->
-												<div class="flex items-center gap-1 bg-[#12141e] border border-white/[0.08] rounded-lg p-1">
+												<div class="flex items-center gap-1 bg-[#12141e] border border-white/[0.08] rounded-lg p-1 shrink-0 ml-2">
 													<button
 														type="button"
 														onclick={() => toggleStar(msg.id)}
@@ -1190,7 +1211,7 @@
 														class="p-1.5 rounded hover:bg-white/[0.08] text-[#8e93a2] hover:text-[#f43f5e] transition-colors cursor-pointer"
 														title="Open in Zen Focus Reader"
 													>
-														<SlidersHorizontal class="w-3.5 h-3.5" />
+														<BookOpen class="w-3.5 h-3.5" />
 													</button>
 
 													<button
@@ -1208,11 +1229,28 @@
 												</div>
 											</div>
 
-											<!-- Unedited Verbatim Text -->
+											<!-- Text Content with Read More Truncation -->
 											{#if msg.text}
-												<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
-													{msg.text}
-												</p>
+												<div class="flex flex-col gap-1.5">
+													<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
+														{isLongText && !isExpanded ? msg.text.slice(0, 260) + '...' : msg.text}
+													</p>
+													{#if isLongText}
+														<button
+															type="button"
+															onclick={() => toggleStoryExpand(msg.id)}
+															class="self-start text-xs font-semibold text-[#f43f5e] hover:text-[#fb7185] transition-colors cursor-pointer flex items-center gap-1"
+														>
+															{#if isExpanded}
+																<span>Show less</span>
+																<ChevronUp class="w-3 h-3" />
+															{:else}
+																<span>Read more</span>
+																<ChevronDown class="w-3 h-3" />
+															{/if}
+														</button>
+													{/if}
+												</div>
 											{/if}
 
 											<!-- Media Image Stream Attachment (Proxied via MTProto) -->
@@ -1254,7 +1292,7 @@
 											}}
 											class="py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] text-xs font-medium text-[#a0a5b5] hover:text-white transition-all cursor-pointer text-center"
 										>
-											Show {group.messages.length - maxMsgLimit} more stories in this time window
+											Show {group.messages.length - maxMsgLimit} more stories from {group.formattedDate}
 										</button>
 									{/if}
 								</div>
@@ -1264,44 +1302,46 @@
 					</div>
 				{/if}
 
-			<!-- SCENARIO C: CHANNELS DIRECTORY -->
+			<!-- SCENARIO C: CHANNELS DIRECTORY (FIXED OVERLAPPING & RESPONSIVE GRID) -->
 			{:else if activeTab === 'channels'}
-				<div class="flex flex-col gap-6">
+				<div class="flex flex-col gap-6 w-full min-w-0">
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-bold text-white tracking-tight">Subscribed Channels</h2>
-							<p class="text-xs text-[#8e93a2]">Channels tracked via <code class="text-[#f43f5e] font-mono text-[11px]">TRACKED_CHANNELS</code></p>
+							<p class="text-xs text-[#8e93a2]">Channels configured in <code class="text-[#f43f5e] font-mono text-[11px]">TRACKED_CHANNELS</code></p>
 						</div>
 						<span class="text-xs font-mono bg-white/[0.04] border border-white/[0.08] px-3 py-1 rounded-xl text-[#a6abb8]">{data.channels?.length || 0} Channels</span>
 					</div>
 
-					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 w-full min-w-0">
 						{#each visibleChannels as channel (channel.id)}
 							{@const chColor = getChannelColor(channel.name)}
 							{@const msgCount = channelCounts[channel.id] || channelCounts[channel.name] || 0}
 
-							<div class="surface-card rounded-2xl p-4 flex flex-col gap-3">
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2.5">
-										<div class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs" style="background: {chColor}20; color: {chColor}; border: 1px solid {chColor}35;">
+							<div class="surface-card rounded-2xl p-4 flex flex-col justify-between gap-3 min-w-0 overflow-hidden w-full">
+								<div class="flex items-center justify-between gap-2.5 min-w-0 w-full">
+									<div class="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+										<div class="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0" style="background: {chColor}20; color: {chColor}; border: 1px solid {chColor}35;">
 											{channel.name.slice(0, 2).toUpperCase()}
 										</div>
-										<div class="flex flex-col min-w-0">
-											<span class="text-xs font-bold text-white truncate">{channel.name}</span>
-											<span class="text-[10px] text-[#6b7080] font-mono truncate">ID: {channel.id}</span>
+										<div class="flex flex-col min-w-0 flex-1 overflow-hidden">
+											<span class="text-xs font-bold text-white truncate block" title={channel.name}>{channel.name}</span>
+											<span class="text-[10px] text-[#6b7080] font-mono truncate block">ID: {channel.id}</span>
 										</div>
 									</div>
-									<span class="text-[10px] font-mono px-2 py-0.5 rounded-full border {msgCount > 0 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-[#6b7080] bg-white/[0.03] border-white/[0.06]'}">
-										{msgCount} unread
-									</span>
+									{#if msgCount > 0}
+										<span class="text-[10px] font-mono px-2 py-0.5 rounded-full border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shrink-0">
+											{msgCount}
+										</span>
+									{/if}
 								</div>
 
-								<div class="flex items-center justify-between text-[11px] text-[#8e93a2] pt-2 border-t border-white/[0.06]">
-									<span>Unread Stories: {msgCount}</span>
+								<div class="flex items-center justify-between text-[11px] text-[#8e93a2] pt-2 border-t border-white/[0.06] shrink-0">
+									<span>Stories: {msgCount}</span>
 									<button
 										type="button"
 										onclick={() => selectChannel(channel.id)}
-										class="text-[#f43f5e] hover:underline font-semibold cursor-pointer"
+										class="text-[#f43f5e] hover:underline font-semibold cursor-pointer shrink-0"
 									>
 										Filter Channel →
 									</button>
@@ -1309,11 +1349,21 @@
 							</div>
 						{/each}
 					</div>
+
+					{#if (data.channels?.length || 0) > visibleChannelsCount}
+						<button
+							type="button"
+							onclick={() => visibleChannelsCount += 30}
+							class="w-full py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] text-xs font-medium text-[#a0a5b5] hover:text-white transition-all cursor-pointer text-center"
+						>
+							Show more channels...
+						</button>
+					{/if}
 				</div>
 
 			<!-- SCENARIO D: PULSE & METRICS -->
 			{:else if activeTab === 'stats'}
-				<div class="flex flex-col gap-6">
+				<div class="flex flex-col gap-6 w-full min-w-0">
 					<div>
 						<h2 class="text-base font-bold text-white tracking-tight">Channel Pulse & Volume</h2>
 						<p class="text-xs text-[#8e93a2]">Posting cadence and activity metrics across your subscribed channels</p>
@@ -1327,21 +1377,21 @@
 						</div>
 
 						<div class="surface-card rounded-2xl p-5 flex flex-col gap-1">
-							<span class="text-xs text-[#8e93a2]">Unread Stories</span>
+							<span class="text-xs text-[#8e93a2]">Total Stories</span>
 							<span class="text-2xl font-bold text-white font-mono">{data.stats.messageCount}</span>
 							<span class="text-[11px] text-[#8e93a2] font-mono mt-1">Across {data.stats.dayCount} days</span>
 						</div>
 
 						<div class="surface-card rounded-2xl p-5 flex flex-col gap-1">
-							<span class="text-xs text-[#8e93a2]">Est. Catch-Up Time</span>
+							<span class="text-xs text-[#8e93a2]">Est. Reading Time</span>
 							<span class="text-2xl font-bold text-white font-mono">~{Math.max(1, Math.round(data.stats.messageCount * 0.3))} min</span>
-							<span class="text-[11px] text-[#f43f5e] font-mono mt-1">Zero algorithmic fluff</span>
+							<span class="text-[11px] text-[#f43f5e] font-mono mt-1">Direct chronological stream</span>
 						</div>
 					</div>
 
 					<!-- Weekly Cadence Distribution Bar Chart -->
 					<div class="surface-card rounded-2xl p-5 flex flex-col gap-4">
-						<span class="text-xs font-bold text-white">Daily Unread Distribution</span>
+						<span class="text-xs font-bold text-white">Daily Story Distribution</span>
 						<div class="h-32 flex items-end gap-2 sm:gap-4 pt-4 border-b border-white/[0.08] pb-2">
 							{#each weekdaysList as wd}
 								{@const count = weekdayCounts[wd.day] || 0}
@@ -1358,7 +1408,7 @@
 
 			<!-- SCENARIO E: MEDIA GALLERY -->
 			{:else if activeTab === 'media'}
-				<div class="flex flex-col gap-6">
+				<div class="flex flex-col gap-6 w-full min-w-0">
 					<div>
 						<h2 class="text-base font-bold text-white tracking-tight">Channel Photo Wall</h2>
 						<p class="text-xs text-[#8e93a2]">Chronological stream of photos and attachments</p>
@@ -1366,7 +1416,7 @@
 
 					{#if mediaItems.length === 0}
 						<div class="surface-card rounded-3xl p-8 text-center text-xs text-[#8e93a2]">
-							No photos found in your current unread stories backlog.
+							No photos found in your current stories backlog.
 						</div>
 					{:else}
 						<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -1408,11 +1458,17 @@
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
 		onclick={(e) => { if (e.target === e.currentTarget) isSearchOpen = false; }}
-		role="dialog"
-		tabindex="-1"
-		aria-modal="true"
+		onkeydown={(e) => { if (e.key === 'Escape') isSearchOpen = false; }}
+		role="button"
+		tabindex="0"
+		aria-label="Close search modal"
 	>
-		<div class="w-full max-w-xl surface-panel rounded-2xl p-5 flex flex-col gap-4 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-xl surface-panel rounded-2xl p-5 flex flex-col gap-4 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center gap-3 pb-3 border-b border-white/[0.08]">
 				<Search class="w-5 h-5 text-[#f43f5e]" />
 				<input
@@ -1440,13 +1496,29 @@
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
 		onclick={(e) => { if (e.target === e.currentTarget) isAccountModalOpen = false; }}
-		role="dialog"
-		tabindex="-1"
-		aria-modal="true"
+		onkeydown={(e) => { if (e.key === 'Escape') isAccountModalOpen = false; }}
+		role="button"
+		tabindex="0"
+		aria-label="Close account modal"
 	>
-		<div class="w-full max-w-md surface-panel rounded-3xl p-6 flex flex-col gap-5 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-md surface-panel rounded-3xl p-6 flex flex-col gap-5 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between">
-				<h3 class="text-base font-bold text-white">Account & Session</h3>
+				<div class="flex items-center gap-3">
+					<div class="w-10 h-10 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 p-[1.5px] relative shrink-0">
+						<div class="w-full h-full rounded-full bg-[#0c0d13] flex items-center justify-center text-sm font-bold text-white">
+							{data.account?.initial || 'T'}
+						</div>
+					</div>
+					<div class="flex flex-col">
+						<h3 class="text-sm font-bold text-white">{data.account?.name || 'Connected Account'}</h3>
+						<span class="text-xs text-[#6b7080] font-mono">{data.account?.username ? '@' + data.account.username : 'MTProto Active'}</span>
+					</div>
+				</div>
 				<button type="button" onclick={() => isAccountModalOpen = false} class="text-xs text-[#828796] hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.05] cursor-pointer">Close</button>
 			</div>
 
@@ -1456,8 +1528,8 @@
 					<span class="text-sm font-bold text-white font-mono">{data.stats.channelCount} channels</span>
 				</div>
 				<div class="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] flex flex-col">
-					<span class="text-[11px] text-[#8e93a2]">Unread Stories</span>
-					<span class="text-sm font-bold text-white font-mono">{data.stats.messageCount} unread</span>
+					<span class="text-[11px] text-[#8e93a2]">Total Stories</span>
+					<span class="text-sm font-bold text-white font-mono">{data.stats.messageCount} stories</span>
 				</div>
 			</div>
 
@@ -1488,11 +1560,17 @@
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
 		onclick={(e) => { if (e.target === e.currentTarget) isZenReaderOpen = false; }}
-		role="dialog"
-		tabindex="-1"
-		aria-modal="true"
+		onkeydown={(e) => { if (e.key === 'Escape') isZenReaderOpen = false; }}
+		role="button"
+		tabindex="0"
+		aria-label="Close reader modal"
 	>
-		<div class="w-full max-w-lg surface-panel rounded-3xl p-6 sm:p-8 flex flex-col gap-4 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="w-full max-w-lg surface-panel rounded-3xl p-6 sm:p-8 flex flex-col gap-4 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-bold px-2.5 py-0.5 rounded-full border" style="color: {zenStory.channelColor}; background: {zenStory.channelColor}15; border-color: {zenStory.channelColor}30;">
 					@{zenStory.channelName}
@@ -1503,11 +1581,6 @@
 			<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
 				{zenStory.text}
 			</p>
-
-			<div class="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between text-xs mt-2">
-				<span class="text-[#8e93a2]">Voice Narration</span>
-				<span class="text-xs text-[#f43f5e] font-mono font-semibold">Coming Soon</span>
-			</div>
 		</div>
 	</div>
 {/if}
@@ -1517,9 +1590,10 @@
 	<div
 		class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4"
 		onclick={(e) => { if (e.target === e.currentTarget) closeLightbox(); }}
-		role="dialog"
-		tabindex="-1"
-		aria-modal="true"
+		onkeydown={(e) => { if (e.key === 'Escape') closeLightbox(); }}
+		role="button"
+		tabindex="0"
+		aria-label="Close image lightbox"
 	>
 		<button
 			type="button"
@@ -1529,10 +1603,13 @@
 		>
 			<X class="w-5 h-5" />
 		</button>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<img
 			src={activeLightboxImage}
 			alt="Full resolution view"
 			class="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200"
+			onclick={(e) => e.stopPropagation()}
 		/>
 	</div>
 {/if}

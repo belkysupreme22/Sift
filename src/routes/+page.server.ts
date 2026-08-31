@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import * as db from '$lib/db/index.js';
-import { markChannelAsRead, markChannelsAsRead } from '$lib/bot/index.js';
+import { markChannelAsRead, markChannelsAsRead, getConnectedUserInfo } from '$lib/bot/index.js';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const selectedChannelId = url.searchParams.get('channel') || undefined;
@@ -17,6 +17,7 @@ export const load: PageServerLoad = async ({ url }) => {
 				dayCards: [],
 				selectedChannelId: null,
 				isLoggedIn: false,
+				account: null,
 				sessionUpdatedAt: null,
 				stats: {
 					channelCount: 0,
@@ -26,9 +27,10 @@ export const load: PageServerLoad = async ({ url }) => {
 			};
 		}
 
-		const [channels, dayCards] = await Promise.all([
+		const [channels, dayCards, account] = await Promise.all([
 			db.getAllChannels().catch(() => []),
-			db.getDayCards(selectedChannelId).catch(() => [])
+			db.getDayCards(selectedChannelId).catch(() => []),
+			getConnectedUserInfo().catch(() => null)
 		]);
 
 		// MARK AS READ AT VIEW-TIME:
@@ -50,6 +52,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			dayCards,
 			selectedChannelId: selectedChannelId || null,
 			isLoggedIn: true,
+			account: account || { name: 'Connected Account', username: '', initial: 'T' },
 			sessionUpdatedAt: session?.updatedAt ? session.updatedAt.toISOString() : null,
 			stats: {
 				channelCount: channels.length,
