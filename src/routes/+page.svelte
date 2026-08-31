@@ -55,10 +55,14 @@
 	let isSearchOpen = $state(false);
 	let isAccountModalOpen = $state(false);
 	let isZenReaderOpen = $state(false);
-	let zenStory = $state<{ title: string; channelName: string; text: string; time: string; channelColor: string } | null>(null);
+	let zenStory = $state<{ title: string; channelName: string; text: string; time: string; channelColor: string; channelId?: string; telegramMessageId?: number; messageId?: string } | null>(null);
 
 	// Expandable long stories state
 	let expandedStoryIds = $state<Set<string>>(new Set());
+
+	// On-demand marked as read tracking
+	let readStoryIds = $state<Set<string>>(new Set());
+	let readChannelIds = $state<Set<string>>(new Set());
 
 	// Interactive Onboarding Tour State
 	let isOnboardingOpen = $state(false);
@@ -103,9 +107,9 @@
 			targetSelector: '#tour-story-item',
 			preferredPlacement: 'top' as const,
 			tag: 'Story Superpowers',
-			title: 'Bookmarks, Reader & Raw Text Copy',
-			description: 'Every story card includes 1-tap actions: star/bookmark (★), open in distraction-free Zen Reader, copy raw text, and jump to Telegram.',
-			tip: 'Channel names are color-coded based on posting volume so high-density channels stand out.',
+			title: 'Bookmarks, Reader & Mark as Read',
+			description: 'Every story card includes 1-tap actions: star (★), mark as read (✓), open in distraction-free Zen Reader, and copy raw text.',
+			tip: 'Opening a story in detail view or tapping the checkmark immediately marks it as read.',
 			badge: 'Step 4 of 5'
 		},
 		{
@@ -113,7 +117,7 @@
 			preferredPlacement: 'bottom' as const,
 			tag: 'Sync & Status',
 			title: 'Manual Sync & Account Status',
-			description: 'Click Sync anytime to pull the newest messages from your tracked channels. Opening channels in Sift automatically clears their badges in Telegram.',
+			description: 'Click Sync anytime to pull the newest messages from your tracked channels.',
 			tip: 'Sift keeps your chronological timeline organized and lightning fast.',
 			badge: 'Step 5 of 5'
 		}
@@ -277,6 +281,40 @@
 		triggerHaptic();
 	}
 
+	async function markMessageRead(channelId: string, telegramMessageId: number, messageId: string) {
+		const newSet = new Set(readStoryIds);
+		newSet.add(messageId);
+		readStoryIds = newSet;
+		triggerHaptic();
+
+		try {
+			await fetch('/api/mark-read', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ channelId, telegramMessageId, messageId })
+			});
+		} catch (err) {
+			console.warn('Failed to mark message as read:', err);
+		}
+	}
+
+	async function markChannelRead(channelId: string) {
+		const newSet = new Set(readChannelIds);
+		newSet.add(channelId);
+		readChannelIds = newSet;
+		triggerHaptic();
+
+		try {
+			await fetch('/api/mark-read', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ channelId })
+			});
+		} catch (err) {
+			console.warn('Failed to mark channel as read:', err);
+		}
+	}
+
 	function startOnboardingTour() {
 		isOnboardingOpen = true;
 		onboardingStep = 0;
@@ -412,10 +450,15 @@
 		triggerHaptic();
 	}
 
-	function openReaderModal(title: string, channelName: string, text: string, time: string, color: string) {
-		zenStory = { title, channelName, text, time, channelColor: color };
+	function openReaderModal(title: string, channelName: string, text: string, time: string, color: string, channelId?: string, telegramMessageId?: number, messageId?: string) {
+		zenStory = { title, channelName, text, time, channelColor: color, channelId, telegramMessageId, messageId };
 		isZenReaderOpen = true;
 		triggerHaptic();
+
+		// Mark as read when card is opened in detail view
+		if (channelId && messageId) {
+			markMessageRead(channelId, telegramMessageId || 0, messageId);
+		}
 	}
 
 	function copyText(id: string, text: string) {
@@ -510,7 +553,6 @@
 			try {
 				result = JSON.parse(rawText);
 			} catch (_) {
-				// Proxy returned HTML (e.g. 504 Gateway Timeout or 502)
 				if (res.status === 504 || res.status === 502 || res.status === 499) {
 					syncFeedback = 'Sync running in background... Refreshing timeline.';
 					setTimeout(() => {
@@ -540,8 +582,10 @@
 		const counts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 		for (const card of data.dayCards || []) {
 			for (const msg of card.messages) {
-				const day = new Date(msg.postedAt).getDay();
-				counts[day] = (counts[day] || 0) + 1;
+				if (!readStoryIds.has(msg.id) && !readChannelIds.has(card.channelId)) {
+					const day = new Date(msg.postedAt).getDay();
+					counts[day] = (counts[day] || 0) + 1;
+				}
 			}
 		}
 		return counts;
@@ -550,8 +594,10 @@
 	let channelCounts = $derived.by(() => {
 		const map: Record<string, number> = {};
 		for (const card of data.dayCards || []) {
-			map[card.channelId] = (map[card.channelId] || 0) + card.messageCount;
-			map[card.channelName] = (map[card.channelName] || 0) + card.messageCount;
+			if (readChannelIds.has(card.channelId)) continue;
+			const validMsgs = card.messages.filter((m) => !readStoryIds.has(m.id));
+			map[card.channelId] = (map[card.channelId] || 0) + validMsgs.length;
+			map[card.channelName] = (map[card.channelName] || 0) + validMsgs.length;
 		}
 		return map;
 	});
@@ -561,6 +607,18 @@
 		if (selectedChannelFilter) {
 			cards = cards.filter((c) => c.channelId === selectedChannelFilter);
 		}
+
+		// Filter out locally marked as read messages and channels
+		cards = cards.map((c) => {
+			if (readChannelIds.has(c.channelId)) {
+				return { ...c, messages: [] };
+			}
+			return {
+				...c,
+				messages: c.messages.filter((m) => !readStoryIds.has(m.id))
+			};
+		}).filter((c) => c.messages.length > 0);
+
 		if (selectedWeekdays.length > 0) {
 			cards = cards.map((c) => ({
 				...c,
@@ -598,7 +656,9 @@
 		const q = searchQuery.trim().toLowerCase();
 
 		for (const card of cards) {
+			if (readChannelIds.has(card.channelId)) continue;
 			for (const msg of card.messages) {
+				if (readStoryIds.has(msg.id)) continue;
 				if (msg.hasMedia) {
 					if (!q || (msg.text || '').toLowerCase().includes(q) || card.channelName.toLowerCase().includes(q)) {
 						items.push({
@@ -1056,10 +1116,10 @@
 						<div class="surface-card rounded-2xl p-4 flex flex-col gap-1.5">
 							<div class="flex items-center gap-2 text-emerald-400">
 								<CheckCircle2 class="w-4 h-4" />
-								<span class="text-xs font-bold text-white">View-Time Badge Sync</span>
+								<span class="text-xs font-bold text-white">View Detail & Read</span>
 							</div>
 							<p class="text-xs text-[#8e93a2] leading-relaxed">
-								Opening channels in Sift clears Telegram's native notification badge counts.
+								Open any story in detail view or tap mark-as-read to dismiss it cleanly.
 							</p>
 						</div>
 
@@ -1069,7 +1129,7 @@
 								<span class="text-xs font-bold text-white">Private & Sandboxed</span>
 							</div>
 							<p class="text-xs text-[#8e93a2] leading-relaxed">
-								End-to-end MTProto encrypted session with instant 1-click account and session wipe.
+								Private end-to-end encrypted session with instant 1-click account and session wipe.
 							</p>
 						</div>
 					</div>
@@ -1212,6 +1272,17 @@
 
 												<!-- Hover / Touch Actions Bar -->
 												<div class="flex items-center gap-1 bg-[#12141e] border border-white/[0.08] rounded-lg p-1 shrink-0 ml-2">
+													<!-- Mark as Read Button -->
+													<button
+														type="button"
+														onclick={() => markMessageRead(msg.channelId, msg.telegramMessageId, msg.id)}
+														class="p-1.5 rounded hover:bg-white/[0.08] text-[#8e93a2] hover:text-emerald-400 transition-colors cursor-pointer"
+														title="Mark as read (dismiss from timeline)"
+													>
+														<Check class="w-3.5 h-3.5" />
+													</button>
+
+													<!-- Star Bookmark -->
 													<button
 														type="button"
 														onclick={() => toggleStar(msg.id)}
@@ -1221,15 +1292,17 @@
 														<Star class="w-3.5 h-3.5 {isStarred ? 'fill-[#fbbf24]' : ''}" />
 													</button>
 
+													<!-- Open in Focus Reader Detail Dialog -->
 													<button
 														type="button"
-														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor)}
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
 														class="p-1.5 rounded hover:bg-white/[0.08] text-[#8e93a2] hover:text-[#f43f5e] transition-colors cursor-pointer"
-														title="Open in Zen Focus Reader"
+														title="Open in Zen Focus Reader (marks as read)"
 													>
 														<BookOpen class="w-3.5 h-3.5" />
 													</button>
 
+													<!-- Copy Raw Text -->
 													<button
 														type="button"
 														onclick={() => copyText(msg.id, msg.text || '')}
@@ -1248,23 +1321,35 @@
 											<!-- Text Content with Read More Truncation -->
 											{#if msg.text}
 												<div class="flex flex-col gap-1.5">
-													<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
+													<p
+														class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans cursor-pointer hover:text-white transition-colors"
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+													>
 														{isLongText && !isExpanded ? msg.text.slice(0, 260) + '...' : msg.text}
 													</p>
 													{#if isLongText}
-														<button
-															type="button"
-															onclick={() => toggleStoryExpand(msg.id)}
-															class="self-start text-xs font-semibold text-[#f43f5e] hover:text-[#fb7185] transition-colors cursor-pointer flex items-center gap-1"
-														>
-															{#if isExpanded}
-																<span>Show less</span>
-																<ChevronUp class="w-3 h-3" />
-															{:else}
-																<span>Read more</span>
-																<ChevronDown class="w-3 h-3" />
-															{/if}
-														</button>
+														<div class="flex items-center gap-3 mt-0.5">
+															<button
+																type="button"
+																onclick={() => toggleStoryExpand(msg.id)}
+																class="text-xs font-semibold text-[#f43f5e] hover:text-[#fb7185] transition-colors cursor-pointer flex items-center gap-1"
+															>
+																{#if isExpanded}
+																	<span>Show less</span>
+																	<ChevronUp class="w-3 h-3" />
+																{:else}
+																	<span>Read inline</span>
+																	<ChevronDown class="w-3 h-3" />
+																{/if}
+															</button>
+															<button
+																type="button"
+																onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatMessageTime(msg.postedAt), chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+																class="text-xs text-[#8e93a2] hover:text-white transition-colors cursor-pointer"
+															>
+																Open in reader →
+															</button>
+														</div>
 													{/if}
 												</div>
 											{/if}
@@ -1318,7 +1403,7 @@
 					</div>
 				{/if}
 
-			<!-- SCENARIO C: CHANNELS DIRECTORY (FIXED OVERLAPPING & RESPONSIVE GRID) -->
+			<!-- SCENARIO C: CHANNELS DIRECTORY -->
 			{:else if activeTab === 'channels'}
 				<div class="flex flex-col gap-6 w-full min-w-0">
 					<div class="flex items-center justify-between">
@@ -1353,13 +1438,25 @@
 
 								<div class="flex items-center justify-between text-[11px] text-[#8e93a2] pt-2 border-t border-white/[0.06] shrink-0">
 									<span>Stories: {msgCount}</span>
-									<button
-										type="button"
-										onclick={() => selectChannel(channel.id)}
-										class="text-[#f43f5e] hover:underline font-semibold cursor-pointer shrink-0"
-									>
-										Filter Channel →
-									</button>
+									<div class="flex items-center gap-2">
+										{#if msgCount > 0}
+											<button
+												type="button"
+												onclick={() => markChannelRead(channel.id)}
+												class="text-xs text-[#8e93a2] hover:text-emerald-400 transition-colors cursor-pointer"
+												title="Mark all stories in this channel as read"
+											>
+												Mark read
+											</button>
+										{/if}
+										<button
+											type="button"
+											onclick={() => selectChannel(channel.id)}
+											class="text-[#f43f5e] hover:underline font-semibold cursor-pointer shrink-0"
+										>
+											Filter →
+										</button>
+									</div>
 								</div>
 							</div>
 						{/each}
@@ -1570,7 +1667,7 @@
 	</div>
 {/if}
 
-<!-- 5. ZEN FOCUS READER MODAL -->
+<!-- 5. ZEN FOCUS READER MODAL (WITH DETAIL MARK-AS-READ) -->
 {#if isZenReaderOpen && zenStory}
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
@@ -1587,15 +1684,32 @@
 			onclick={(e) => e.stopPropagation()}
 		>
 			<div class="flex items-center justify-between">
-				<span class="text-xs font-bold px-2.5 py-0.5 rounded-full border" style="color: {zenStory.channelColor}; background: {zenStory.channelColor}15; border-color: {zenStory.channelColor}30;">
-					@{zenStory.channelName}
-				</span>
+				<div class="flex items-center gap-2">
+					<span class="text-xs font-bold px-2.5 py-0.5 rounded-full border" style="color: {zenStory.channelColor}; background: {zenStory.channelColor}15; border-color: {zenStory.channelColor}30;">
+						@{zenStory.channelName}
+					</span>
+					<span class="text-[11px] text-[#6b7080] font-mono">{zenStory.time}</span>
+				</div>
 				<button type="button" onclick={() => isZenReaderOpen = false} class="text-xs text-[#828796] hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.05] cursor-pointer">Close</button>
 			</div>
 
 			<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
 				{zenStory.text}
 			</p>
+
+			<div class="flex items-center justify-between pt-3 border-t border-white/[0.06] text-xs">
+				<div class="flex items-center gap-1.5 text-emerald-400">
+					<CheckCircle2 class="w-4 h-4" />
+					<span class="font-medium">Marked as Read</span>
+				</div>
+				<button
+					type="button"
+					onclick={() => isZenReaderOpen = false}
+					class="px-4 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs text-white font-medium cursor-pointer"
+				>
+					Done
+				</button>
+			</div>
 		</div>
 	</div>
 {/if}
