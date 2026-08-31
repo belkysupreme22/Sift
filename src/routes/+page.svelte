@@ -41,7 +41,9 @@
 		Clock,
 		Flame,
 		CheckCircle,
-		BookOpen
+		BookOpen,
+		Type,
+		Maximize2
 	} from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -54,8 +56,21 @@
 	let searchQuery = $state('');
 	let isSearchOpen = $state(false);
 	let isAccountModalOpen = $state(false);
+	
+	// Zen Focus Reader State (Full Info Responsive Viewer)
 	let isZenReaderOpen = $state(false);
-	let zenStory = $state<{ title: string; channelName: string; text: string; time: string; channelColor: string; channelId?: string; telegramMessageId?: number; messageId?: string } | null>(null);
+	let zenFontSize = $state<'normal' | 'large' | 'huge'>('normal');
+	let zenStory = $state<{
+		title: string;
+		channelName: string;
+		text: string;
+		time: string;
+		channelColor: string;
+		channelId?: string;
+		telegramMessageId?: number;
+		messageId?: string;
+		hasMedia?: boolean;
+	} | null>(null);
 
 	// Expandable long stories state
 	let expandedStoryIds = $state<Set<string>>(new Set());
@@ -108,7 +123,7 @@
 			preferredPlacement: 'top' as const,
 			tag: 'Story Superpowers',
 			title: 'Bookmarks, Reader & Mark as Read',
-			description: 'Every story card includes 1-tap actions: star (★), mark as read (✓), open in distraction-free Zen Reader, and copy raw text.',
+			description: 'Every story card includes 1-tap actions: star (★), mark as read (✓), open in full Zen Reader, and copy raw text.',
 			tip: 'Opening a story in detail view or tapping the checkmark immediately marks it as read.',
 			badge: 'Step 4 of 5'
 		},
@@ -450,8 +465,28 @@
 		triggerHaptic();
 	}
 
-	function openReaderModal(title: string, channelName: string, text: string, time: string, color: string, channelId?: string, telegramMessageId?: number, messageId?: string) {
-		zenStory = { title, channelName, text, time, channelColor: color, channelId, telegramMessageId, messageId };
+	function openReaderModal(
+		title: string, 
+		channelName: string, 
+		text: string, 
+		time: string, 
+		color: string, 
+		channelId?: string, 
+		telegramMessageId?: number, 
+		messageId?: string,
+		hasMedia?: boolean
+	) {
+		zenStory = { 
+			title, 
+			channelName, 
+			text, 
+			time, 
+			channelColor: color, 
+			channelId, 
+			telegramMessageId, 
+			messageId,
+			hasMedia: Boolean(hasMedia)
+		};
 		isZenReaderOpen = true;
 		triggerHaptic();
 
@@ -731,6 +766,15 @@
 		if (selectedWeekdays.length === 7) return 'All Days';
 		return selectedWeekdays.map((d) => weekdaysList.find((w) => w.day === d)?.short || '').join(', ');
 	});
+
+	// Word count & estimated read time for Zen Reader
+	let zenStats = $derived.by(() => {
+		if (!zenStory?.text) return { words: 0, minutes: 1, chars: 0 };
+		const chars = zenStory.text.length;
+		const words = zenStory.text.trim().split(/\s+/).length;
+		const minutes = Math.max(1, Math.ceil(words / 180));
+		return { words, minutes, chars };
+	});
 </script>
 
 <svelte:head>
@@ -789,7 +833,7 @@
 		}
 
 		/* Custom scrollbar */
-		::-webkit-scrollbar { width: 4px; height: 4px; }
+		::-webkit-scrollbar { width: 5px; height: 5px; }
 		::-webkit-scrollbar-track { background: transparent; }
 		::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 9999px; }
 		::-webkit-scrollbar-thumb:hover { background: rgba(244, 63, 94, 0.5); }
@@ -1331,12 +1375,12 @@
 														<Star class="w-3.5 h-3.5 {isStarred ? 'fill-[#fbbf24]' : ''}" />
 													</button>
 
-													<!-- Open in Focus Reader Detail Dialog -->
+													<!-- Open in Full Info Zen Reader Detail Dialog -->
 													<button
 														type="button"
-														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id, msg.hasMedia)}
 														class="p-1.5 rounded hover:bg-white/[0.08] text-[#8e93a2] hover:text-[#f43f5e] transition-colors cursor-pointer"
-														title="Open in Zen Focus Reader (marks as read)"
+														title="Open in Zen Focus Reader (Full Detail Viewer)"
 													>
 														<BookOpen class="w-3.5 h-3.5" />
 													</button>
@@ -1362,7 +1406,7 @@
 												<div class="flex flex-col gap-1.5">
 													<p
 														class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans cursor-pointer hover:text-white transition-colors"
-														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
+														onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id, msg.hasMedia)}
 													>
 														{isLongText && !isExpanded ? msg.text.slice(0, 260) + '...' : msg.text}
 													</p>
@@ -1383,10 +1427,11 @@
 															</button>
 															<button
 																type="button"
-																onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id)}
-																class="text-xs text-[#8e93a2] hover:text-white transition-colors cursor-pointer"
+																onclick={() => openReaderModal(msg.text?.slice(0, 40) || 'Story', msg.channelName, msg.text || '', formatStoryDateTime(msg.postedAt).full, chColor, msg.channelId, msg.telegramMessageId, msg.id, msg.hasMedia)}
+																class="text-xs text-[#8e93a2] hover:text-white transition-colors cursor-pointer flex items-center gap-1"
 															>
-																Open in reader →
+																<span>Open in reader</span>
+																<ArrowUpRight class="w-3 h-3" />
 															</button>
 														</div>
 													{/if}
@@ -1723,10 +1768,12 @@
 	</div>
 {/if}
 
-<!-- 5. ZEN FOCUS READER MODAL (WITH DETAIL MARK-AS-READ) -->
+<!-- 5. FULL INFO ZEN FOCUS READER MODAL (RESPONSIVE & HANDLES LONG TEXTS) -->
 {#if isZenReaderOpen && zenStory}
+	{@const isStarred = zenStory.messageId ? starredIds.has(zenStory.messageId) : false}
+
 	<div
-		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+		class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
 		onclick={(e) => { if (e.target === e.currentTarget) isZenReaderOpen = false; }}
 		onkeydown={(e) => { if (e.key === 'Escape') isZenReaderOpen = false; }}
 		role="button"
@@ -1736,36 +1783,162 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="w-full max-w-lg surface-panel rounded-3xl p-6 sm:p-8 flex flex-col gap-4 border border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+			class="w-full max-w-2xl max-h-[92vh] sm:max-h-[88vh] surface-panel rounded-3xl flex flex-col border border-white/[0.12] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
 			onclick={(e) => e.stopPropagation()}
 		>
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2">
-					<span class="text-xs font-bold px-2.5 py-0.5 rounded-full border" style="color: {zenStory.channelColor}; background: {zenStory.channelColor}15; border-color: {zenStory.channelColor}30;">
+			<!-- Top Header Bar -->
+			<div class="px-5 sm:px-7 py-4 border-b border-white/[0.08] bg-[#11131c] flex items-center justify-between gap-3 shrink-0">
+				<div class="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+					<button
+						type="button"
+						onclick={() => { if (zenStory?.channelId) { selectChannel(zenStory.channelId); isZenReaderOpen = false; } }}
+						class="text-xs font-bold px-3 py-1 rounded-full border transition-all cursor-pointer truncate max-w-[200px]"
+						style="color: {zenStory.channelColor}; background: {zenStory.channelColor}18; border-color: {zenStory.channelColor}35;"
+						title="Filter by @{zenStory.channelName}"
+					>
 						@{zenStory.channelName}
-					</span>
-					<span class="text-[11px] text-[#6b7080] font-mono">{zenStory.time}</span>
+					</button>
+					<span class="text-xs text-[#8e93a2] font-mono truncate">{zenStory.time}</span>
 				</div>
-				<button type="button" onclick={() => isZenReaderOpen = false} class="text-xs text-[#828796] hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.05] cursor-pointer">Close</button>
+
+				<!-- Header Controls -->
+				<div class="flex items-center gap-1.5 shrink-0">
+					<!-- Font Size Switcher -->
+					<div class="flex items-center bg-white/[0.04] border border-white/[0.08] rounded-xl p-0.5 text-xs text-[#8e93a2]">
+						<button
+							type="button"
+							onclick={() => { zenFontSize = 'normal'; triggerHaptic(); }}
+							class="px-2 py-0.5 rounded-lg transition-colors {zenFontSize === 'normal' ? 'bg-[#f43f5e] text-white font-bold' : 'hover:text-white'}"
+							title="Standard Text Size"
+						>
+							A
+						</button>
+						<button
+							type="button"
+							onclick={() => { zenFontSize = 'large'; triggerHaptic(); }}
+							class="px-2 py-0.5 rounded-lg transition-colors text-sm {zenFontSize === 'large' ? 'bg-[#f43f5e] text-white font-bold' : 'hover:text-white'}"
+							title="Large Text Size"
+						>
+							A+
+						</button>
+						<button
+							type="button"
+							onclick={() => { zenFontSize = 'huge'; triggerHaptic(); }}
+							class="px-2 py-0.5 rounded-lg transition-colors text-base {zenFontSize === 'huge' ? 'bg-[#f43f5e] text-white font-bold' : 'hover:text-white'}"
+							title="Huge Text Size"
+						>
+							A++
+						</button>
+					</div>
+
+					<button
+						type="button"
+						onclick={() => isZenReaderOpen = false}
+						class="p-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-[#9ca3af] hover:text-white transition-colors cursor-pointer"
+						title="Close Reader (ESC)"
+					>
+						<X class="w-4 h-4" />
+					</button>
+				</div>
 			</div>
 
-			<p class="text-xs sm:text-sm text-[#e1e4ec] leading-relaxed whitespace-pre-wrap font-sans">
-				{zenStory.text}
-			</p>
-
-			<div class="flex items-center justify-between pt-3 border-t border-white/[0.06] text-xs">
-				<div class="flex items-center gap-1.5 text-emerald-400">
-					<CheckCircle2 class="w-4 h-4" />
-					<span class="font-medium">Marked as Read</span>
+			<!-- Reader Body (Scrollable with Graceful Long Text Support) -->
+			<div class="flex-1 overflow-y-auto px-5 sm:px-8 py-6 flex flex-col gap-5 select-text">
+				
+				<!-- Story Metrics strip -->
+				<div class="flex items-center gap-3 text-xs text-[#717684] font-mono pb-3 border-b border-white/[0.06]">
+					<div class="flex items-center gap-1.5">
+						<Clock class="w-3.5 h-3.5 text-[#f43f5e]" />
+						<span>~{zenStats.minutes} min read</span>
+					</div>
+					<span>•</span>
+					<span>{zenStats.words} words</span>
+					<span>•</span>
+					<span>{zenStats.chars} characters</span>
 				</div>
-				<button
-					type="button"
-					onclick={() => isZenReaderOpen = false}
-					class="px-4 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs text-white font-medium cursor-pointer"
-				>
-					Done
-				</button>
+
+				<!-- High-Res Image Attachment if Available -->
+				{#if zenStory.hasMedia && zenStory.channelId && zenStory.telegramMessageId}
+					<div class="rounded-2xl overflow-hidden bg-[#151722] border border-white/[0.08] relative group cursor-pointer">
+						<button
+							type="button"
+							onclick={() => openLightbox(`/api/media/${zenStory?.channelId}/${zenStory?.telegramMessageId}`)}
+							class="w-full h-56 sm:h-72 flex items-center justify-center overflow-hidden"
+						>
+							<img
+								src="/api/media/{zenStory.channelId}/{zenStory.telegramMessageId}"
+								alt="Story attachment"
+								class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+							/>
+							<div class="absolute bottom-3 right-3 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-md border border-white/10 text-xs text-white flex items-center gap-1.5">
+								<Maximize2 class="w-3.5 h-3.5" />
+								<span>Zoom Photo</span>
+							</div>
+						</button>
+					</div>
+				{/if}
+
+				<!-- Full Story Text Content -->
+				<article class="leading-relaxed text-[#e5e7eb] font-sans select-text whitespace-pre-wrap break-words {zenFontSize === 'normal' ? 'text-sm sm:text-base leading-7 sm:leading-8' : zenFontSize === 'large' ? 'text-base sm:text-lg leading-8 sm:leading-9' : 'text-lg sm:text-xl leading-9 sm:leading-10'}">
+					{zenStory.text}
+				</article>
+
 			</div>
+
+			<!-- Bottom Sticky Actions Bar -->
+			<div class="px-5 sm:px-7 py-3.5 border-t border-white/[0.08] bg-[#0e1017] flex items-center justify-between gap-3 shrink-0">
+				
+				<!-- Read Confirmation Badge -->
+				<div class="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
+					<div class="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+						<Check class="w-3 h-3" />
+					</div>
+					<span>Marked as Read</span>
+				</div>
+
+				<!-- Right Action Buttons -->
+				<div class="flex items-center gap-2">
+					<!-- Star / Bookmark Button -->
+					{#if zenStory.messageId}
+						<button
+							type="button"
+							onclick={() => { if (zenStory?.messageId) toggleStar(zenStory.messageId); }}
+							class="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs transition-colors flex items-center gap-1.5 cursor-pointer {isStarred ? 'text-[#fbbf24]' : 'text-[#8e93a2] hover:text-white'}"
+							title="{isStarred ? 'Unstar Story' : 'Star Story'}"
+						>
+							<Star class="w-3.5 h-3.5 {isStarred ? 'fill-[#fbbf24]' : ''}" />
+							<span>{isStarred ? 'Starred' : 'Star'}</span>
+						</button>
+					{/if}
+
+					<!-- Copy Story Text -->
+					<button
+						type="button"
+						onclick={() => { if (zenStory?.text && zenStory?.messageId) copyText(zenStory.messageId, zenStory.text); }}
+						class="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs text-[#8e93a2] hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+						title="Copy Complete Story"
+					>
+						{#if copiedId === zenStory.messageId}
+							<Check class="w-3.5 h-3.5 text-emerald-400" />
+							<span class="text-emerald-400">Copied!</span>
+						{:else}
+							<Copy class="w-3.5 h-3.5" />
+							<span>Copy</span>
+						{/if}
+					</button>
+
+					<!-- Done Button -->
+					<button
+						type="button"
+						onclick={() => isZenReaderOpen = false}
+						class="px-5 py-1.5 rounded-xl bg-[#f43f5e] hover:bg-[#e11d48] text-xs font-semibold text-white transition-all shadow-md shadow-[#f43f5e]/20 cursor-pointer"
+					>
+						Done
+					</button>
+				</div>
+
+			</div>
+
 		</div>
 	</div>
 {/if}
