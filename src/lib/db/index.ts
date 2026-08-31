@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.js';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, lte } from 'drizzle-orm';
 import type { DayCard, Message, NewChannel, NewMessage } from './schema.js';
 import * as dotenv from 'dotenv';
 
@@ -71,6 +71,23 @@ export async function clearAllUserData(id = 'main') {
 	await db.delete(schema.session).where(eq(schema.session.id, id));
 	await db.delete(schema.messages);
 	await db.delete(schema.channels);
+}
+
+/**
+ * Removes already read messages (<= readInboxMaxId) from Postgres
+ * to guarantee that Sift only stores and displays active unread messages.
+ */
+export async function removeReadMessages(channelId: string, readInboxMaxId: number) {
+	if (readInboxMaxId <= 0) return;
+	const db = getDb();
+	await db
+		.delete(schema.messages)
+		.where(
+			and(
+				eq(schema.messages.channelId, channelId),
+				lte(schema.messages.telegramMessageId, readInboxMaxId)
+			)
+		);
 }
 
 export async function upsertChannel(channel: NewChannel) {

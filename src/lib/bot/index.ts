@@ -183,6 +183,11 @@ export async function syncChannels(): Promise<{
 
 				console.log(`[Sync] Channel "${channelName}" (ID: ${channelId}) -> readInboxMaxId: ${readInboxMaxId}, unreadCount: ${unreadCount}`);
 
+				// Clean up any previously stored messages for this channel that are now marked as read
+				if (readInboxMaxId > 0) {
+					await db.removeReadMessages(channelId, readInboxMaxId);
+				}
+
 				// 3. Pull all messages newer than readInboxMaxId (no cap on backlog size)
 				const newMessages: NewMessage[] = [];
 				let offsetId = 0;
